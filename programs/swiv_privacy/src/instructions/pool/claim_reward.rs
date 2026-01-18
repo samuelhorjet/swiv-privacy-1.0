@@ -43,11 +43,9 @@ pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
     let bet = &mut ctx.accounts.user_bet;
     let mut payout_amount: u64 = 0;
 
-    // Strict Parimutuel Logic
     require!(pool.weight_finalized, CustomError::SettlementTooEarly);
 
     if bet.calculated_weight > 0 && pool.total_weight > 0 {
-        // The entire vault balance (after fee deduction in finalize_weights) is distributable
         let total_distributable_pot = pool.vault_balance as u128;
 
         payout_amount = bet
@@ -58,7 +56,6 @@ pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
             .unwrap() as u64;
     }
 
-    // Perform Transfer if Payout > 0
     if payout_amount > 0 {
         require!(
             payout_amount <= pool.vault_balance,
