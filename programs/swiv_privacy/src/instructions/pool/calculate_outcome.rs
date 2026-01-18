@@ -66,6 +66,7 @@ pub fn calculate_outcome(ctx: Context<CalculateOutcome>) -> Result<()> {
     )?;
 
     pool.total_weight = pool.total_weight.checked_add(weight).unwrap();
+    pool.prize_pool = pool.prize_pool.checked_add(bet.deposit).unwrap();
     
     bet.calculated_weight = weight;
     bet.is_weight_added = true;
@@ -77,7 +78,7 @@ pub fn calculate_outcome(ctx: Context<CalculateOutcome>) -> Result<()> {
         weight: weight,
     });
 
-    msg!("Calculated Weight for User {}: {}", ctx.accounts.bet_owner.key(), weight);
+    msg!("Calculated Weight: {}, Added to Prize Pool: {}", weight, bet.deposit);
 
     Ok(())
 }

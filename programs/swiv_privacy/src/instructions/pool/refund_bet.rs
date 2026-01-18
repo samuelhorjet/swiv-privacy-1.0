@@ -57,9 +57,15 @@ pub struct RefundBet<'info> {
 pub fn refund_bet(ctx: Context<RefundBet>) -> Result<()> {
     let clock = Clock::get()?;
     let user_bet = &mut ctx.accounts.user_bet;
+    let pool = &mut ctx.accounts.pool;
     
     require!(!user_bet.is_revealed, CustomError::CannotRefundRevealed);
-    require!(clock.unix_timestamp > user_bet.end_timestamp, CustomError::SettlementTooEarly);
+
+    let reveal_window = 300; 
+    let can_refund = clock.unix_timestamp > pool.end_time 
+                  || clock.unix_timestamp > user_bet.creation_ts + reveal_window;
+
+    require!(can_refund, CustomError::SettlementTooEarly);
 
     let penalty_bps = 100u64;
     let penalty_amount = user_bet.deposit
@@ -68,11 +74,8 @@ pub fn refund_bet(ctx: Context<RefundBet>) -> Result<()> {
 
     let refund_amount = user_bet.deposit.checked_sub(penalty_amount).unwrap();
 
-    let pool = &mut ctx.accounts.pool;
     let pool_vault = &ctx.accounts.pool_vault;
-
     let bump = pool.bump;
-    
     let seeds = &[SEED_POOL, pool.name.as_bytes(), &[bump]]; 
     let signer = &[&seeds[..]];
 
@@ -103,6 +106,7 @@ pub fn refund_bet(ctx: Context<RefundBet>) -> Result<()> {
             penalty_amount,
         )?;
     }
+    
     pool.vault_balance = pool.vault_balance.checked_sub(user_bet.deposit).unwrap();
 
     user_bet.status = BetStatus::Settled;

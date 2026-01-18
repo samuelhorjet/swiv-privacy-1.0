@@ -46,7 +46,7 @@ pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
     require!(pool.weight_finalized, CustomError::SettlementTooEarly);
 
     if bet.calculated_weight > 0 && pool.total_weight > 0 {
-        let total_distributable_pot = pool.vault_balance as u128;
+        let total_distributable_pot = pool.prize_pool as u128;
 
         payout_amount = bet
             .calculated_weight
@@ -80,6 +80,7 @@ pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
             payout_amount,
         )?;
         
+        pool.vault_balance = pool.vault_balance.checked_sub(payout_amount).unwrap();
     }
 
     bet.status = BetStatus::Settled;

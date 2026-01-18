@@ -82,6 +82,7 @@ pub fn batch_calculate_outcome<'info>(
         weight = weight.checked_sub(penalty).unwrap();
 
         pool.total_weight = pool.total_weight.checked_add(weight).unwrap();
+        pool.prize_pool = pool.prize_pool.checked_add(user_bet.deposit).unwrap();
         
         user_bet.calculated_weight = weight;
         user_bet.is_weight_added = true; 

@@ -26,7 +26,7 @@ pub struct CreatePool<'info> {
     #[account(
         init,
         payer = admin,
-        space = 200 + (4 + name.len()) + (4 + metadata.as_ref().map(|s| s.len()).unwrap_or(0)),
+        space = 200 + 8 + (4 + name.len()) + (4 + metadata.as_ref().map(|s| s.len()).unwrap_or(0)),
         seeds = [SEED_POOL, name.as_bytes()],
         bump
     )]
@@ -73,7 +73,9 @@ pub fn create_pool(
     pool.token_mint = ctx.accounts.token_mint.key();
     pool.start_time = start_time;
     pool.end_time = end_time;
+    
     pool.vault_balance = 0; 
+    pool.prize_pool = 0; 
     
     pool.max_accuracy_buffer = max_accuracy_buffer;
     pool.conviction_bonus_bps = conviction_bonus_bps; 
