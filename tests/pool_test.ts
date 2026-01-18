@@ -41,7 +41,6 @@ function loadOrGenerateKeypair(name: string): Keypair {
   }
 }
 
-// --- HELPER: Wait for Account Ownership to Revert to L1 ---
 async function waitForOwnership(
   connection: anchor.web3.Connection,
   account: PublicKey,
@@ -56,7 +55,7 @@ async function waitForOwnership(
     if (info) {
       currentOwner = info.owner;
       if (info.owner.equals(expectedOwner)) {
-        return true; // Success
+        return true; 
       }
     }
     await sleep(2000);
@@ -76,11 +75,11 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
   const admin = (provider.wallet as anchor.Wallet).payer;
 
   const users = [
-    loadOrGenerateKeypair("userP1"), // Will do SINGLE ops
-    loadOrGenerateKeypair("userP2"), // Will do BATCH ops
-    loadOrGenerateKeypair("userP3"), // Will do BATCH ops
-    loadOrGenerateKeypair("userP4"), // Will do BATCH ops
-    loadOrGenerateKeypair("userP5"), // Will do BATCH ops
+    loadOrGenerateKeypair("userP1"), 
+    loadOrGenerateKeypair("userP2"), 
+    loadOrGenerateKeypair("userP3"), 
+    loadOrGenerateKeypair("userP4"),
+    loadOrGenerateKeypair("userP5"),
   ];
 
   let usdcMint: PublicKey;
@@ -492,7 +491,7 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
     console.log("    ✅ Weights Finalized");
 
     // 6. CLAIM
-    console.log("\n    📊 --- PARIMUTUEL RESULTS ---");
+    console.log("\n    📊 --- POOL RESULTS ---");
     for (let i = 0; i < users.length; i++) {
       const preBal = (
         await provider.connection.getTokenAccountBalance(userAtas[i])

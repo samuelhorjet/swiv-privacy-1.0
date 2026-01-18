@@ -66,7 +66,6 @@ pub fn place_bet(
     require!(clock.unix_timestamp >= pool.start_time, CustomError::DurationTooShort);
     require!(clock.unix_timestamp < pool.end_time, CustomError::DurationTooShort); 
 
-    // Transfer logic...
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
@@ -81,7 +80,6 @@ pub fn place_bet(
 
     pool.vault_balance = pool.vault_balance.checked_add(amount).unwrap();
 
-    // Initialize UserBet
     {
         let user_bet = &mut ctx.accounts.user_bet;
         user_bet.owner = ctx.accounts.user.key();
