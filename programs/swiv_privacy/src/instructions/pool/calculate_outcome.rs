@@ -41,7 +41,6 @@ pub fn calculate_outcome(ctx: Context<CalculateOutcome>) -> Result<()> {
     require!(pool.is_resolved, CustomError::SettlementTooEarly);
     require!(!bet.is_weight_added, CustomError::AlreadySettled);
 
-    // 1. Accuracy
     let user_prediction = bet.prediction_target;
     let result = pool.resolution_target;
 
@@ -51,17 +50,14 @@ pub fn calculate_outcome(ctx: Context<CalculateOutcome>) -> Result<()> {
         pool.max_accuracy_buffer
     )?;
 
-    // 2. Time Bonus
     let time_bonus = calculate_time_bonus(
         pool.start_time,
         pool.end_time,
         bet.creation_ts
     )?;
 
-    // 3. Conviction Bonus
     let conviction_bonus = calculate_conviction_bonus(bet.update_count);
 
-    // 4. Calculate Final Weight (Renamed function)
     let weight = calculate_weight(
         bet.deposit,
         accuracy_score,
@@ -69,7 +65,6 @@ pub fn calculate_outcome(ctx: Context<CalculateOutcome>) -> Result<()> {
         conviction_bonus
     )?;
 
-    // 5. Update State
     pool.total_weight = pool.total_weight.checked_add(weight).unwrap();
     
     bet.calculated_weight = weight;
