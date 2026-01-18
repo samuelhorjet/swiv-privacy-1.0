@@ -18,14 +18,12 @@ pub struct UserBet {
     pub creation_ts: i64,       
     pub update_count: u32,     
     
-    // --- WEIGHT CALCULATION ---
     pub calculated_weight: u128, 
     pub is_weight_added: bool,
 
 
     pub referrer: Option<Pubkey>,
     
-    // --- PRIVACY / COMMIT-REVEAL ---
     pub commitment: [u8; 32], 
     pub is_revealed: bool,    
     
