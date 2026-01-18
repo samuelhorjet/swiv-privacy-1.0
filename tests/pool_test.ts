@@ -69,7 +69,7 @@ async function waitForOwnership(
   return false;
 }
 
-describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
+describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.SwivPrivacy as Program<SwivPrivacy>;
@@ -91,7 +91,7 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
   let poolPda: PublicKey;
   let vaultPda: PublicKey;
 
-  const POOL_NAME = `PARI-TEST-${Math.floor(Math.random() * 99999)}`;
+  const POOL_NAME = `Pool-TEST-${Math.floor(Math.random() * 99999)}`;
   const TARGET_PRICE = new anchor.BN(200_000_000);
 
   const randId = Math.floor(Math.random() * 1000);
@@ -166,7 +166,7 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
     console.log("    ✅ Setup Complete");
   });
 
-  it("Create Parimutuel Pool", async () => {
+  it("Create Pool", async () => {
     const now = Math.floor(Date.now() / 1000);
     const START_TIME = new anchor.BN(now);
     const DURATION = 70;
@@ -182,7 +182,6 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
       program.programId
     );
 
-    const initialLiquidity = new anchor.BN(0);
     const adminAta = await getOrCreateAssociatedTokenAccount(
       provider.connection,
       admin,
@@ -196,7 +195,6 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
         "Hybrid Test",
         START_TIME,
         END_TIME,
-        initialLiquidity,
         new anchor.BN(500),
         new anchor.BN(1000)
       )

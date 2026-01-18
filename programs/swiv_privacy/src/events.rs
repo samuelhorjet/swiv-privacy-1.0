@@ -38,7 +38,6 @@ pub struct PoolCreated {
     pub pool_name: String,
     pub start_time: i64,
     pub end_time: i64,
-    pub initial_liquidity: u64,
 }
 
 #[event]
