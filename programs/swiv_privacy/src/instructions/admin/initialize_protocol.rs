@@ -35,7 +35,6 @@ pub fn initialize_protocol(
     global_config.admin = ctx.accounts.admin.key();
     global_config.treasury_wallet = ctx.accounts.treasury_wallet.key();
     
-    // Set Protocol Fee
     global_config.protocol_fee_bps = protocol_fee_bps;
     
     global_config.paused = false;
