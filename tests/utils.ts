@@ -21,7 +21,6 @@ export function createCommitment(
   target: anchor.BN,
   salt: Buffer
 ) {
-  // UPDATED: Only Target + Salt are hashed now. Low/High removed.
   const buf = Buffer.concat([
     target.toArrayLike(Buffer, "le", 8),
     salt,

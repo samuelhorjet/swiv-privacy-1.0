@@ -28,7 +28,7 @@ describe("1. Setup & Admin", () => {
 
     try {
       await program.methods
-        .initializeProtocol(new anchor.BN(300), [usdcMint])
+        .initializeProtocol(new anchor.BN(300))
         .accountsPartial({
           admin: admin.publicKey,
           treasuryWallet: admin.publicKey,
@@ -38,7 +38,7 @@ describe("1. Setup & Admin", () => {
       console.log("    ✅ Protocol Initialized");
     } catch (e) {
       await program.methods
-        .updateConfig(null, null, [usdcMint])
+        .updateConfig(null, new anchor.BN(300))
         .accountsPartial({
           admin: admin.publicKey,
           globalConfig: configPda,

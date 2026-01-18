@@ -66,7 +66,7 @@ async function waitForOwnership(
       } vs Expected: ${expectedOwner.toBase58().slice(0, 6)}`
     );
   }
-  return false; // Timed out
+  return false;
 }
 
 describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
@@ -163,17 +163,6 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
     );
     treasuryAta = treasuryInfo.address;
 
-    try {
-      await program.methods
-        .updateConfig(null, null, [usdcMint])
-        .accountsPartial({
-          admin: admin.publicKey,
-          globalConfig: globalConfigPda,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-    } catch (e) {}
-
     console.log("    ✅ Setup Complete");
   });
 
@@ -208,8 +197,8 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
         START_TIME,
         END_TIME,
         initialLiquidity,
-        new anchor.BN(500), // Max Accuracy Buffer
-        new anchor.BN(1000) // Conviction Bonus BPS
+        new anchor.BN(500),
+        new anchor.BN(1000)
       )
       .accountsPartial({
         globalConfig: globalConfigPda,
@@ -234,7 +223,6 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
       if (i > 0) await sleep(200);
 
       const user = users[i];
-      // Updated Commitment: Only Target + Salt
       const commitment = createCommitment(predictions[i], salts[i]);
 
       const [betPda] = PublicKey.findProgramAddressSync(
@@ -248,7 +236,6 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
       );
       betPdas.push(betPda);
 
-      // Arguments: amount, commitment, requestId
       await program.methods
         .placeBet(betAmount, Array.from(commitment), requestIds[i])
         .accountsPartial({
@@ -283,13 +270,13 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
         .rpc();
       await sleep(50);
     }
-    await sleep(5000); // Wait for delegation to settle
+    await sleep(5000);
 
     // 2. User 1 Updates Bet (Testing Single Update Logic)
     console.log("    > User 1 Updating (Single Op)...");
     const user1 = users[0];
     const erConnection = new anchor.web3.Connection(
-      "https://devnet.magicblock.app",
+      "https://devnet.magicblock.app"
     );
     const erProvider1 = new anchor.AnchorProvider(
       erConnection,
@@ -299,13 +286,12 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
     const erProgram1 = new anchor.Program(program.idl, erProvider1);
 
     try {
-      // Arguments: new_prediction_target
       await erProgram1.methods
         .updateBet(TARGET_PRICE)
         .accounts({
           user: user1.publicKey,
           userBet: betPdas[0],
-          pool: null, // Ephemeral skip
+          pool: null,
         })
         .rpc();
       console.log("    ✅ User 1 Updated");
@@ -330,7 +316,6 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
       const erProgram = new anchor.Program(program.idl, erProvider);
 
       try {
-        // Arguments: prediction_target, salt
         await erProgram.methods
           .revealBet(predictions[i], Array.from(salts[i]))
           .accounts({ user: user.publicKey, userBet: betPdas[i] })
@@ -357,7 +342,7 @@ describe("2. Parimutuel Pool (Mixed Single & Batch Ops)", () => {
   // --- HYBRID UNDELEGATION ---
   it("Hybrid Undelegate (User 1 Single, Others Batch)", async () => {
     const erConnection = new anchor.web3.Connection(
-      "https://devnet.magicblock.app",
+      "https://devnet.magicblock.app"
     );
 
     // 1. SINGLE UNDELEGATE (User 1)
