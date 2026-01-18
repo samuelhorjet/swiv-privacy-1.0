@@ -62,7 +62,7 @@ pub struct AdminTransferred {
 pub struct BetDelegated {
     pub bet_address: Pubkey,
     pub user: Pubkey,
-    pub userbet_id: String,
+    pub request_id: String,
 }
 
 #[event]

@@ -10,7 +10,7 @@ pub mod utils;
 
 use instructions::*;
 
-declare_id!("6spJY9XSUz9KtS73jqojSMzwuCdwiroy8AX9nZ27is3U");
+declare_id!("8aAVXhM9uNdoijr7YJf3KG8yikHYdAUQZ6kmts9BBVLh");
 
 #[ephemeral]
 #[program]
@@ -46,12 +46,12 @@ pub mod swiv_privacy {
     }
 
     // --- DELEGATION ---
-    pub fn delegate_bet(ctx: Context<DelegateBet>, userbet_id: String) -> Result<()> {
-        instructions::delegation::delegate_bet(ctx, userbet_id)
+    pub fn delegate_bet(ctx: Context<DelegateBet>, request_id: String) -> Result<()> {
+        instructions::delegation::delegate_bet(ctx, request_id)
     }
 
-    pub fn undelegate_bet(ctx: Context<UndelegateBet>, userbet_id: String) -> Result<()> {
-        instructions::delegation::undelegate_bet(ctx, userbet_id)
+    pub fn undelegate_bet(ctx: Context<UndelegateBet>, request_id: String) -> Result<()> {
+        instructions::delegation::undelegate_bet(ctx, request_id)
     }
 
     pub fn batch_undelegate_bets<'info>(
@@ -85,13 +85,13 @@ pub mod swiv_privacy {
         ctx: Context<PlaceBet>,
         amount: u64,
         commitment: [u8; 32], 
-        userbet_id: String,
+        request_id: String,
     ) -> Result<()> {
         pool::place_bet(
             ctx,
             amount,
             commitment,
-            userbet_id,
+            request_id,
         )
     }
 

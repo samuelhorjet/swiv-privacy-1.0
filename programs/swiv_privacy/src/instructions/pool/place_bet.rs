@@ -9,7 +9,7 @@ use crate::events::BetPlaced;
 #[instruction(
     amount: u64,
     commitment: [u8; 32], 
-    userbet_id: String
+    request_id: String
 )]
 pub struct PlaceBet<'info> {
     #[account(mut)]
@@ -44,7 +44,7 @@ pub struct PlaceBet<'info> {
         init,
         payer = user,
         space = UserBet::SPACE,
-        seeds = [SEED_BET, pool.key().as_ref(), user.key().as_ref(), userbet_id.as_bytes()], 
+        seeds = [SEED_BET, pool.key().as_ref(), user.key().as_ref(), request_id.as_bytes()], 
         bump
     )]
     pub user_bet: Box<Account<'info, UserBet>>,
@@ -58,7 +58,7 @@ pub fn place_bet(
     ctx: Context<PlaceBet>,
     amount: u64,
     commitment: [u8; 32], 
-    _userbet_id: String, 
+    _request_id: String, 
 ) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
     let clock = Clock::get()?;

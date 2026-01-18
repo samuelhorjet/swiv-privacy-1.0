@@ -49,8 +49,7 @@ pub fn finalize_weights(ctx: Context<FinalizeWeights>) -> Result<()> {
     require!(pool.is_resolved, CustomError::SettlementTooEarly);
     require!(!pool.weight_finalized, CustomError::AlreadySettled);
 
-    let total_pot = pool.prize_pool;
-    
+    let total_pot = pool.vault_balance;
     let fee_amount = total_pot
         .checked_mul(global_config.protocol_fee_bps).unwrap()
         .checked_div(10000).unwrap();
@@ -75,8 +74,6 @@ pub fn finalize_weights(ctx: Context<FinalizeWeights>) -> Result<()> {
         )?;
 
         pool.vault_balance = pool.vault_balance.checked_sub(fee_amount).unwrap();
-        pool.prize_pool = pool.prize_pool.checked_sub(fee_amount).unwrap();
-        
         msg!("Protocol Fee Deducted: {}", fee_amount);
     }
 
@@ -88,7 +85,7 @@ pub fn finalize_weights(ctx: Context<FinalizeWeights>) -> Result<()> {
         fee_deducted: fee_amount,
     });
     
-    msg!("Weights Finalized. Prize Pool: {}, Total Weight: {}", pool.prize_pool, pool.total_weight);
+    msg!("Weights Finalized. Total Distributable: {}, Total Weight: {}", pool.vault_balance, pool.total_weight);
 
     Ok(())
 }

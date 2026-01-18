@@ -9,7 +9,7 @@ use ephemeral_rollups_sdk::ephem::commit_and_undelegate_accounts;
 
 #[delegate]
 #[derive(Accounts)]
-#[instruction(userbet_id: String)]
+#[instruction(request_id: String)]
 pub struct DelegateBet<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
@@ -22,7 +22,7 @@ pub struct DelegateBet<'info> {
     pub user_bet: AccountInfo<'info>,
 }
 
-pub fn delegate_bet(ctx: Context<DelegateBet>, userbet_id: String) -> Result<()> {
+pub fn delegate_bet(ctx: Context<DelegateBet>, request_id: String) -> Result<()> {
     let (_bump, pool_identifier, owner) = {
         let user_bet_data = ctx.accounts.user_bet.try_borrow_data()?;
         let mut data_slice: &[u8] = &user_bet_data;
@@ -45,7 +45,7 @@ pub fn delegate_bet(ctx: Context<DelegateBet>, userbet_id: String) -> Result<()>
         SEED_BET,
         pool_key.as_ref(),
         user_key.as_ref(),
-        userbet_id.as_bytes(),
+        request_id.as_bytes(),
     ];
 
     let config = DelegateConfig::default();
@@ -59,7 +59,7 @@ pub fn delegate_bet(ctx: Context<DelegateBet>, userbet_id: String) -> Result<()>
     emit!(BetDelegated {
         bet_address: ctx.accounts.user_bet.key(),
         user: ctx.accounts.user.key(),
-        userbet_id,
+        request_id,
     });
 
     msg!("Bet Delegated successfully");
@@ -68,7 +68,7 @@ pub fn delegate_bet(ctx: Context<DelegateBet>, userbet_id: String) -> Result<()>
 
 #[commit]
 #[derive(Accounts)]
-#[instruction(userbet_id: String)]
+#[instruction(request_id: String)]
 pub struct UndelegateBet<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
@@ -85,7 +85,7 @@ pub struct UndelegateBet<'info> {
             SEED_BET, 
             pool.key().as_ref(), 
             user.key().as_ref(), 
-            userbet_id.as_bytes()
+            request_id.as_bytes()
         ],
         bump = user_bet.bump,
         constraint = user_bet.owner == user.key() @ CustomError::Unauthorized,
@@ -93,7 +93,7 @@ pub struct UndelegateBet<'info> {
     pub user_bet: Box<Account<'info, UserBet>>,
 }
 
-pub fn undelegate_bet(ctx: Context<UndelegateBet>, _userbet_id: String) -> Result<()> {
+pub fn undelegate_bet(ctx: Context<UndelegateBet>, _request_id: String) -> Result<()> {
     let pool = &ctx.accounts.pool;
     let clock = Clock::get()?;
 
