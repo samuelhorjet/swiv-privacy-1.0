@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Token, TokenAccount};
 use crate::state::{Pool, GlobalConfig};
 use crate::constants::{SEED_GLOBAL_CONFIG, SEED_POOL, SEED_POOL_VAULT};
 use crate::errors::CustomError;
@@ -11,7 +11,6 @@ use crate::events::PoolCreated;
     metadata: Option<String>, 
     start_time: i64, 
     end_time: i64, 
-    initial_liquidity: u64,
     max_accuracy_buffer: u64,
     conviction_bonus_bps: u64 
 )]
@@ -62,7 +61,6 @@ pub fn create_pool(
     metadata: Option<String>,
     start_time: i64,
     end_time: i64,
-    initial_liquidity: u64,
     max_accuracy_buffer: u64,
     conviction_bonus_bps: u64,
 ) -> Result<()> {
@@ -88,26 +86,10 @@ pub fn create_pool(
 
     pool.bump = ctx.bumps.pool;
 
-    if initial_liquidity > 0 {
-        token::transfer(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.admin_token_account.to_account_info(),
-                    to: ctx.accounts.pool_vault.to_account_info(),
-                    authority: ctx.accounts.admin.to_account_info(),
-                },
-            ),
-            initial_liquidity,
-        )?;
-        pool.vault_balance = initial_liquidity;
-    }
-
     emit!(PoolCreated {
         pool_name: name,
         start_time,
         end_time,
-        initial_liquidity,
     });
 
     Ok(())

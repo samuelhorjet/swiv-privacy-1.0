@@ -67,7 +67,6 @@ pub mod swiv_privacy {
         metadata: Option<String>,
         start_time: i64,
         end_time: i64,
-        initial_liquidity: u64,
         max_accuracy_buffer: u64,
         conviction_bonus_bps: u64,
     ) -> Result<()> {
@@ -77,7 +76,6 @@ pub mod swiv_privacy {
             metadata,
             start_time,
             end_time,
-            initial_liquidity,
             max_accuracy_buffer,
             conviction_bonus_bps,
         )
