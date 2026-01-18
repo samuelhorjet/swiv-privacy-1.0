@@ -16,7 +16,6 @@ pub struct UpdateBet<'info> {
     )]
     pub user_bet: Box<Account<'info, UserBet>>,
 
-    // Read-Only Access to read Pool Start/End times
     #[account(
         seeds = [SEED_POOL, user_bet.pool_identifier.as_bytes()],
         bump = pool.bump
@@ -35,16 +34,12 @@ pub fn update_bet(
 
     require!(clock.unix_timestamp < pool.end_time, CustomError::DurationTooShort);
 
-    // 1. Reset Time Bonus (User loses their early-bird advantage)
     user_bet.creation_ts = clock.unix_timestamp;
     
-    // 2. Increment Conviction Count (Penalty logic applied later in calculation)
     user_bet.update_count = user_bet.update_count.checked_add(1).unwrap();
 
-    // 3. Update Prediction (Securely inside TEE)
     user_bet.prediction_target = new_prediction_target;
     
-    // Flag as revealed since the new prediction is now in plaintext state inside TEE
     user_bet.is_revealed = true; 
     
     msg!("Bet Updated securely via TEE. New Target: {}", new_prediction_target);

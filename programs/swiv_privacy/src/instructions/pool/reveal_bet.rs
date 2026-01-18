@@ -25,15 +25,12 @@ pub fn reveal_bet(
     let user_bet = &mut ctx.accounts.user_bet;
     let clock = Clock::get()?;
 
-    // 1. TIMING CHECK
     let max_delay_seconds = 300; 
     if clock.unix_timestamp > user_bet.creation_ts + max_delay_seconds {
         return Err(CustomError::RevealWindowExpired.into());
     }
 
-    // 2. VERIFY HASH (Target + Salt only)
     let mut data = Vec::new();
-    // Removed low/high bytes from hashing
     data.extend_from_slice(&prediction_target.to_le_bytes());
     data.extend_from_slice(&salt);
 
@@ -44,7 +41,6 @@ pub fn reveal_bet(
         CustomError::InvalidCommitment
     );
 
-    // 3. STORE SECRETS & FLIP REVEALED FLAG
     user_bet.prediction_target = prediction_target;
     user_bet.is_revealed = true;
 
