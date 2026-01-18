@@ -54,11 +54,9 @@ pub fn batch_calculate_outcome<'info>(
         let mut user_bet_data = user_bet_acc_info.try_borrow_mut_data()?;
         let mut user_bet = UserBet::try_deserialize(&mut &user_bet_data[..])?;
 
-        // --- Skip checks ---
         if user_bet.pool_identifier != pool.name { continue; }
         if user_bet.status != BetStatus::Active || !user_bet.is_revealed { continue; }
 
-        // 1. Accuracy
         let accuracy_score = calculate_accuracy_score(
             user_bet.prediction_target,
             result,
