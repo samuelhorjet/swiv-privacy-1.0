@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
 pub enum BetStatus {
+    Initialized,
     Active,
     Calculated, 
     Settled,    
@@ -21,13 +22,7 @@ pub struct UserBet {
     pub calculated_weight: u128, 
     pub is_weight_added: bool,
 
-
-    pub referrer: Option<Pubkey>,
-    
-    pub commitment: [u8; 32], 
-    pub is_revealed: bool,    
-    
-    pub prediction_target: u64, 
+    pub prediction: u64, 
     
     pub status: BetStatus,
     

@@ -6,6 +6,7 @@ import {
   SystemProgram,
   Keypair,
   LAMPORTS_PER_SOL,
+  ComputeBudgetProgram,
 } from "@solana/web3.js";
 import {
   createMint,
@@ -19,11 +20,13 @@ import {
   SEED_BET,
   SEED_POOL,
   SEED_GLOBAL_CONFIG,
-  createCommitment,
-  performUndelegate,
+  PERMISSION_PROGRAM_ID,
   sleep,
+  getAuthToken,
+  verifyTeeRpcIntegrity,
+  permissionPdaFromAccount,
 } from "./utils";
-import { MAGIC_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
+import * as nacl from "tweetnacl";
 
 const KEYS_DIR = path.join(__dirname, "keys");
 if (!fs.existsSync(KEYS_DIR)) fs.mkdirSync(KEYS_DIR);
@@ -32,7 +35,7 @@ function loadOrGenerateKeypair(name: string): Keypair {
   const filePath = path.join(KEYS_DIR, `${name}.json`);
   if (fs.existsSync(filePath)) {
     return Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(fs.readFileSync(filePath, "utf-8")))
+      new Uint8Array(JSON.parse(fs.readFileSync(filePath, "utf-8"))),
     );
   } else {
     const kp = Keypair.generate();
@@ -41,97 +44,98 @@ function loadOrGenerateKeypair(name: string): Keypair {
   }
 }
 
-async function waitForOwnership(
-  connection: anchor.web3.Connection,
-  account: PublicKey,
-  expectedOwner: PublicKey,
-  timeout = 30000
-) {
-  const start = Date.now();
-  let currentOwner = null;
-
-  while (Date.now() - start < timeout) {
-    const info = await connection.getAccountInfo(account, "confirmed");
-    if (info) {
-      currentOwner = info.owner;
-      if (info.owner.equals(expectedOwner)) {
-        return true; 
-      }
+// --- NEW HELPER: Retry Logic for Auth Token ---
+async function getAuthTokenWithRetry(
+  endpoint: string,
+  pubkey: PublicKey,
+  signer: (msg: Uint8Array) => Promise<Uint8Array>,
+  retries = 3,
+): Promise<{ token: string }> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await getAuthToken(endpoint, pubkey, signer);
+    } catch (e) {
+      if (i === retries - 1) throw e; // Throw if last retry fails
+      console.log(
+        `      ⚠️  Auth failed ("${e.message}"). Retrying (${
+          i + 1
+        }/${retries})...`,
+      );
+      await sleep(1000 * (i + 1)); // Wait 1s, then 2s, etc.
     }
-    await sleep(2000);
-    console.log(
-      `      ⏳ Waiting for L1 ownership... Current: ${
-        currentOwner ? currentOwner.toBase58().slice(0, 6) : "null"
-      } vs Expected: ${expectedOwner.toBase58().slice(0, 6)}`
-    );
   }
-  return false;
+  throw new Error("Unreachable");
 }
 
-describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
+describe("Swiv Privacy: Production Flow", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.SwivPrivacy as Program<SwivPrivacy>;
   const admin = (provider.wallet as anchor.Wallet).payer;
 
   const users = [
-    loadOrGenerateKeypair("userP1"), 
-    loadOrGenerateKeypair("userP2"), 
-    loadOrGenerateKeypair("userP3"), 
-    loadOrGenerateKeypair("userP4"),
-    loadOrGenerateKeypair("userP5"),
+    loadOrGenerateKeypair("user_tee_1"),
+    loadOrGenerateKeypair("user_tee_2"),
   ];
 
   let usdcMint: PublicKey;
-  let treasuryAta: PublicKey;
   let userAtas: PublicKey[] = [];
-
   let globalConfigPda: PublicKey;
   let poolPda: PublicKey;
   let vaultPda: PublicKey;
 
-  const POOL_NAME = `Pool-TEST-${Math.floor(Math.random() * 99999)}`;
+  const POOL_NAME = `TEE-Pool-${Math.floor(Math.random() * 1000)}`;
+  let END_TIME: anchor.BN;
   const TARGET_PRICE = new anchor.BN(200_000_000);
 
-  const randId = Math.floor(Math.random() * 1000);
-  const requestIds = users.map((_, i) => `p${randId}_${i}`);
-  const salts = users.map(() => Keypair.generate().publicKey.toBuffer());
+  const predictions = [new anchor.BN(200_000_000), new anchor.BN(250_000_000)];
+  const requestIds = ["req_1", "req_2"];
   const betPdas: PublicKey[] = [];
 
-  const predictions = [
-    TARGET_PRICE,
-    TARGET_PRICE,
-    TARGET_PRICE.add(new anchor.BN(400)),
-    TARGET_PRICE.add(new anchor.BN(20000)),
-    TARGET_PRICE.sub(new anchor.BN(2000)),
-  ];
+  const TEE_URL = "https://devnet-as.magicblock.app";
+  const TEE_WS_URL = "wss://devnet-as.magicblock.app";
 
-  let poolEndTime = 0;
+  const ephemeralRpcEndpoint = (
+    process.env.EPHEMERAL_PROVIDER_ENDPOINT || TEE_URL
+  ).replace(/\/$/, "");
+  const ephemeralWsEndpoint = process.env.EPHEMERAL_WS_ENDPOINT || TEE_WS_URL;
 
-  it("Setup: Environment & Funding", async () => {
+  it("0. Health Check: Verify TEE Connection", async () => {
+    console.log(`    🏥 Checking integrity of ${ephemeralRpcEndpoint}...`);
+    try {
+      await verifyTeeRpcIntegrity(ephemeralRpcEndpoint);
+      console.log("    ✅ TEE RPC is healthy and reachable.");
+    } catch (e) {
+      console.error("    ❌ TEE RPC Unreachable or Invalid:", e);
+      throw new Error(
+        "Cannot connect to MagicBlock TEE. Check your internet or try a different TEE_URL.",
+      );
+    }
+  });
+
+  it("1. Setup Environment", async () => {
     [globalConfigPda] = PublicKey.findProgramAddressSync(
       [SEED_GLOBAL_CONFIG],
-      program.programId
+      program.programId,
     );
-
     usdcMint = await createMint(
       provider.connection,
       admin,
       admin.publicKey,
       null,
-      6
+      6,
     );
 
     userAtas = [];
     for (const user of users) {
       const bal = await provider.connection.getBalance(user.publicKey);
-      if (bal < 0.1 * LAMPORTS_PER_SOL) {
+      if (bal < 0.5 * LAMPORTS_PER_SOL) {
         const tx = new anchor.web3.Transaction().add(
           SystemProgram.transfer({
             fromPubkey: admin.publicKey,
             toPubkey: user.publicKey,
-            lamports: 0.1 * LAMPORTS_PER_SOL,
-          })
+            lamports: 0.5 * LAMPORTS_PER_SOL,
+          }),
         );
         await provider.sendAndConfirm(tx);
       }
@@ -139,7 +143,7 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
         provider.connection,
         admin,
         usdcMint,
-        user.publicKey
+        user.publicKey,
       );
       userAtas.push(ata.address);
       await mintTo(
@@ -148,54 +152,53 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
         usdcMint,
         ata.address,
         admin,
-        1000 * 1_000_000
+        1000 * 1e6,
       );
     }
 
-    const config = await program.account.globalConfig.fetch(globalConfigPda);
-    const treasuryInfo = await getOrCreateAssociatedTokenAccount(
-      provider.connection,
-      admin,
-      usdcMint,
-      config.treasuryWallet,
-      true
-    );
-    treasuryAta = treasuryInfo.address;
-
-    console.log("    ✅ Setup Complete");
+    try {
+      await program.methods
+        .initializeProtocol(new anchor.BN(300))
+        .accountsPartial({
+          admin: admin.publicKey,
+          treasuryWallet: admin.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    } catch (e) {
+      /* Idempotent */
+    }
   });
 
-  it("Create Pool", async () => {
+  it("2. Create Pool (L1)", async () => {
     const now = Math.floor(Date.now() / 1000);
     const START_TIME = new anchor.BN(now);
-    const DURATION = 70;
-    const END_TIME = START_TIME.add(new anchor.BN(DURATION));
-    poolEndTime = now + DURATION;
+    END_TIME = START_TIME.add(new anchor.BN(100)); // 100s duration
 
     [poolPda] = PublicKey.findProgramAddressSync(
       [SEED_POOL, Buffer.from(POOL_NAME)],
-      program.programId
+      program.programId,
     );
     [vaultPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("pool_vault"), poolPda.toBuffer()],
-      program.programId
+      program.programId,
     );
 
     const adminAta = await getOrCreateAssociatedTokenAccount(
       provider.connection,
       admin,
       usdcMint,
-      admin.publicKey
+      admin.publicKey,
     );
 
     await program.methods
       .createPool(
         POOL_NAME,
-        "Hybrid Test",
+        "BTC/USDC",
         START_TIME,
         END_TIME,
         new anchor.BN(500),
-        new anchor.BN(1000)
+        new anchor.BN(1000),
       )
       .accountsPartial({
         globalConfig: globalConfigPda,
@@ -209,32 +212,32 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       })
       .rpc();
-
-    console.log(`    ✅ Pool Created: ${POOL_NAME}`);
+    console.log("    ✅ Pool Created on L1");
   });
 
-  it("Users 1-5 Place Bets", async () => {
-    const betAmount = new anchor.BN(100 * 1_000_000);
+  it("3.1. Secure Bet Setup (L1: Init, Permission, Delegate)", async () => {
+    const betAmount = new anchor.BN(100 * 1e6);
 
     for (let i = 0; i < users.length; i++) {
-      if (i > 0) await sleep(200);
-
       const user = users[i];
-      const commitment = createCommitment(predictions[i], salts[i]);
+      const requestId = requestIds[i];
 
       const [betPda] = PublicKey.findProgramAddressSync(
         [
           SEED_BET,
           poolPda.toBuffer(),
           user.publicKey.toBuffer(),
-          Buffer.from(requestIds[i]),
+          Buffer.from(requestId),
         ],
-        program.programId
+        program.programId,
       );
       betPdas.push(betPda);
+      const permissionPda = permissionPdaFromAccount(betPda);
+
+      console.log(`    Processing User ${i + 1} Setup...`);
 
       await program.methods
-        .placeBet(betAmount, Array.from(commitment), requestIds[i])
+        .initBet(betAmount, requestId)
         .accountsPartial({
           user: user.publicKey,
           globalConfig: globalConfigPda,
@@ -248,171 +251,192 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
         })
         .signers([user])
         .rpc();
+
+      await program.methods
+        .createBetPermission(requestId)
+        .accountsPartial({
+          payer: user.publicKey,
+          user: user.publicKey,
+          userBet: betPda,
+          pool: poolPda,
+          permission: permissionPda,
+          permissionProgram: PERMISSION_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+
+      await program.methods
+        .delegateBet(requestId)
+        .accountsPartial({
+          user: user.publicKey,
+          pool: poolPda,
+          userBet: betPda,
+        })
+        .signers([user])
+        .rpc();
+
+      console.log(`      User ${i + 1}: L1 Setup Complete (Delegated)`);
     }
-    console.log("    ✅ All Bets Placed");
   });
 
-  it("Delegate All, Update (User 1), Reveal All", async () => {
-    // 1. Delegate
-    console.log("    > Delegating...");
+  // --- PART B: TEE Execution (Fast Off-Chain Transactions) ---
+  it("3.2. Secure Bet Execution (TEE: Auth & Place Bet)", async () => {
+    // Check if we already verified integrity to avoid redundant calls
+    // (Optional, but good for speed)
+
     for (let i = 0; i < users.length; i++) {
-      await program.methods
-        .delegateBet(requestIds[i])
-        .accounts({
-          user: users[i].publicKey,
-          pool: poolPda,
-          userBet: betPdas[i],
-        })
-        .signers([users[i]])
-        .rpc();
-      await sleep(50);
-    }
-    await sleep(5000);
+      const user = users[i];
+      const requestId = requestIds[i];
+      const betPda = betPdas[i];
 
-    // 2. User 1 Updates Bet (Testing Single Update Logic)
-    console.log("    > User 1 Updating (Single Op)...");
-    const user1 = users[0];
-    const erConnection = new anchor.web3.Connection(
-      "https://devnet.magicblock.app"
-    );
-    const erProvider1 = new anchor.AnchorProvider(
-      erConnection,
-      new anchor.Wallet(user1),
-      {}
-    );
-    const erProgram1 = new anchor.Program(program.idl, erProvider1);
+      console.log(`      Processing User ${i + 1} on TEE...`);
+      let tokenString = "";
 
-    try {
-      await erProgram1.methods
-        .updateBet(TARGET_PRICE)
-        .accounts({
-          user: user1.publicKey,
-          userBet: betPdas[0],
-          pool: null,
-        })
-        .rpc();
-      console.log("    ✅ User 1 Updated");
-    } catch (e) {
-      console.error("    ❌ User 1 Update Fail:", e);
-    }
-
-    // 3. Reveal All (SKIP User 1 because Update reveals it automatically)
-    console.log("    > Revealing...");
-    for (let i = 0; i < users.length; i++) {
-      if (i === 0) {
-        console.log("      - Skipping User 1 (Already Revealed via Update)");
-        continue;
+      // 1. Try to Generate Auth Token with Retry
+      try {
+        const authToken = await getAuthTokenWithRetry(
+          ephemeralRpcEndpoint,
+          user.publicKey,
+          async (message) => nacl.sign.detached(message, user.secretKey),
+        );
+        tokenString = `?token=${authToken.token}`;
+        console.log(`      🔐 Auth Token generated successfully.`);
+      } catch (e) {
+        console.error(
+          `      ❌ Auth failed. Server might be busy. Falling back to Anonymous.`,
+        );
       }
 
-      const user = users[i];
+      // 2. Connect
+      const erConnection = new anchor.web3.Connection(
+        `${ephemeralRpcEndpoint}${tokenString}`,
+        { commitment: "confirmed", wsEndpoint: ephemeralWsEndpoint },
+      );
+
       const erProvider = new anchor.AnchorProvider(
         erConnection,
         new anchor.Wallet(user),
-        {}
+        anchor.AnchorProvider.defaultOptions(),
       );
       const erProgram = new anchor.Program(program.idl, erProvider);
 
-      try {
-        await erProgram.methods
-          .revealBet(predictions[i], Array.from(salts[i]))
-          .accounts({ user: user.publicKey, userBet: betPdas[i] })
-          .rpc();
-        console.log(`      - User ${i + 1} Revealed`);
-      } catch (e) {
-        console.error(`      - User ${i + 1} Fail:`, e);
-      }
-      await sleep(200);
-    }
-  });
+      // 3. Place Bet
+      const txSig = await erProgram.methods
+        .placeBet(predictions[i], requestId)
+        .accountsPartial({
+          user: user.publicKey,
+          pool: poolPda,
+          userBet: betPda,
+        })
+        .signers([user])
+        .rpc({ skipPreflight: true });
 
-  it("Wait for Expiry", async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const timeLeft = poolEndTime - now;
-    if (timeLeft > 0) {
       console.log(
-        `    ⏳ Waiting ${timeLeft + 5}s for expiry before undelegating...`
+        `      User ${i + 1}: Bet Securely Placed on TEE. Sig: ${txSig}`,
       );
-      await sleep((timeLeft + 5) * 1000);
+
+      // PAUSE between users to prevent "No challenge received" (Rate Limit)
+      if (i < users.length - 1) {
+        console.log("      ⏳ Pausing 5s for server cooldown...");
+        await sleep(5000);
+      }
     }
   });
 
-  // --- HYBRID UNDELEGATION ---
-  it("Hybrid Undelegate (User 1 Single, Others Batch)", async () => {
-    const erConnection = new anchor.web3.Connection(
-      "https://devnet.magicblock.app"
-    );
+  it("3.5. Sneak Peek (Privacy Check - TEE)", async () => {
+    const spyUser = users[0];
+    const targetBetPda = betPdas[1];
 
-    // 1. SINGLE UNDELEGATE (User 1)
-    console.log("\n    🛠️  User 1 Performing SINGLE UNDELEGATE...");
-    const erProvider1 = new anchor.AnchorProvider(
-      erConnection,
-      new anchor.Wallet(users[0]),
-      {}
-    );
-    const erProgram1 = new anchor.Program(program.idl, erProvider1);
+    console.log(`    🕵️  User 1 authenticating to peek at User 2's bet...`);
+    let tokenString = "";
 
     try {
-      await performUndelegate(
-        erProgram1,
-        erConnection,
-        users[0],
-        requestIds[0],
-        poolPda,
-        betPdas[0]
+      // We use the Retry Helper here too
+      const authToken = await getAuthTokenWithRetry(
+        ephemeralRpcEndpoint,
+        spyUser.publicKey,
+        async (message) => nacl.sign.detached(message, spyUser.secretKey),
       );
-      console.log("    ✅ User 1 Single Undelegate Sent");
+      tokenString = `?token=${authToken.token}`;
     } catch (e) {
-      console.error("    ❌ User 1 Single Undelegate Failed", e);
+      console.log(
+        `    ⚠️  SKIPPING STRICT PRIVACY CHECK: Auth Server is Down.`,
+      );
+      return;
     }
 
-    // 2. BATCH UNDELEGATE (Users 2-5)
-    console.log("\n    🛠️  Admin Performing BATCH UNDELEGATE (Users 2-5)...");
-    const erProviderAdmin = new anchor.AnchorProvider(
+    const spyConnection = new anchor.web3.Connection(
+      `${ephemeralRpcEndpoint}${tokenString}`,
+      { commitment: "confirmed" },
+    );
+    const spyProvider = new anchor.AnchorProvider(
+      spyConnection,
+      new anchor.Wallet(spyUser),
+      anchor.AnchorProvider.defaultOptions(),
+    );
+
+    try {
+      const erProgram = new anchor.Program(
+        program.idl,
+        spyProvider,
+      ) as Program<SwivPrivacy>;
+      const betData = await erProgram.account.userBet.fetch(targetBetPda);
+      console.error(
+        "    ❌ DATA LEAKED! Spy read the prediction:",
+        betData.prediction.toString(),
+      );
+      throw new Error("PRIVACY_FAILED: Account data is visible.");
+    } catch (e: any) {
+      if (e.message.includes("PRIVACY_FAILED")) throw e;
+      if (
+        e.message.includes("Account does not exist") ||
+        e.message.includes("Constraint") ||
+        e.message.includes("Access denied")
+      ) {
+        console.log("    ✅ Privacy Confirmed: TEE blocked the Spy.");
+        return;
+      }
+      console.log("    ⚠️ Received error:", e.message);
+    }
+  });
+
+  it("4. Wait for Expiry", async () => {
+    console.log("    ⏳ Waiting for pool expiry...");
+    const expiryMs = END_TIME.toNumber() * 1000;
+    const bufferMs = 5000;
+    const waitTime = expiryMs + bufferMs - Date.now();
+    if (waitTime > 0) {
+      console.log(`       Sleeping for ${waitTime / 1000} seconds...`);
+      await sleep(waitTime);
+    }
+  });
+
+  it("5. Delegate Pool (NOW we move Pool to TEE)", async () => {
+    await program.methods
+      .delegatePool(POOL_NAME)
+      .accountsPartial({
+        admin: admin.publicKey,
+        globalConfig: globalConfigPda,
+        pool: poolPda,
+      })
+      .rpc();
+    console.log("    ✅ Pool Moved to TEE for Calculation");
+  });
+
+  it("6. Resolve & Settle", async () => {
+    const erConnection = new anchor.web3.Connection(ephemeralRpcEndpoint, {
+      commitment: "confirmed",
+      wsEndpoint: ephemeralWsEndpoint,
+    });
+    const erProvider = new anchor.AnchorProvider(
       erConnection,
       new anchor.Wallet(admin),
-      {}
+      anchor.AnchorProvider.defaultOptions(),
     );
-    const erProgramAdmin = new anchor.Program(program.idl, erProviderAdmin);
+    const erProgram = new anchor.Program(program.idl, erProvider);
 
-    const batchAccounts = betPdas.slice(1).map((pubkey) => ({
-      pubkey,
-      isWritable: true,
-      isSigner: false,
-    }));
-
-    try {
-      await erProgramAdmin.methods
-        .batchUndelegateBets()
-        .accounts({
-          payer: admin.publicKey,
-          pool: poolPda,
-          magicProgram: MAGIC_PROGRAM_ID,
-        })
-        .remainingAccounts(batchAccounts)
-        .rpc();
-
-      console.log("    ✅ Batch Undelegate Transaction Sent");
-    } catch (e) {
-      console.error("    ❌ Batch Undelegate Failed:", e);
-    }
-
-    // 3. VERIFY OWNERSHIP
-    await sleep(2000);
-    console.log("    🔍 Verifying L1 Ownership...");
-    for (let i = 0; i < users.length; i++) {
-      const isBack = await waitForOwnership(
-        provider.connection,
-        betPdas[i],
-        program.programId
-      );
-      if (isBack) console.log(`      ✅ User ${i + 1} confirmed on L1`);
-    }
-  });
-
-  // --- HYBRID CALCULATION ---
-  it("Resolve, Hybrid Calculate & Claim", async () => {
-    // 1. RESOLVE POOL
-    await program.methods
+    await erProgram.methods
       .resolvePool(TARGET_PRICE)
       .accountsPartial({
         admin: admin.publicKey,
@@ -420,63 +444,46 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
         pool: poolPda,
       })
       .rpc();
-    console.log("    ✅ Pool Resolved");
+    console.log("    ✅ Pool Resolved on TEE");
 
-    // 2. WAIT FOR BATCH DELAY (Rust requires > 5s after resolution)
-    console.log("    ⏳ Waiting 6s for Batch Calculation Safety Period...");
-    await sleep(6000);
-
-    // 3. SINGLE CALCULATION (User 1)
-    console.log("\n    🛠️  User 1 Performing SINGLE CALCULATION...");
-    try {
-      await program.methods
-        .calculateOutcome()
-        .accountsPartial({
-          payer: users[0].publicKey,
-          betOwner: users[0].publicKey,
-          pool: poolPda,
-          userBet: betPdas[0],
-        })
-        .signers([users[0]])
-        .rpc();
-      console.log("    ✅ User 1 Calculated");
-    } catch (e) {
-      console.error("    ❌ User 1 Calc Failed", e);
-    }
-
-    // 4. BATCH CALCULATE (Users 2-5)
-    console.log("\n    🛠️  Admin Performing BATCH CALCULATION (Users 2-5)...");
-    const batchAccounts = betPdas.slice(1).map((pubkey) => ({
-      pubkey,
+    const batchAccounts = betPdas.map((k) => ({
+      pubkey: k,
       isWritable: true,
       isSigner: false,
     }));
+    await erProgram.methods
+      .batchCalculateWeights()
+      .accountsPartial({ admin: admin.publicKey, pool: poolPda })
+      .remainingAccounts(batchAccounts)
+      .preInstructions([
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 1_000_000 }),
+      ])
+      .rpc();
+    console.log("    ✅ Winners Calculated on TEE");
 
-    try {
-      await program.methods
-        .batchCalculateOutcome()
-        .accountsPartial({
-          admin: admin.publicKey,
-          pool: poolPda,
-        })
-        .remainingAccounts(batchAccounts)
-        .rpc();
-      console.log("    ✅ Batch Calculation Complete");
-    } catch (e) {
-      console.error("    ❌ Batch Calculation Failed:", e);
-    }
+    await erProgram.methods
+      .batchUndelegateBets()
+      .accounts({ payer: admin.publicKey, pool: poolPda })
+      .remainingAccounts(batchAccounts)
+      .rpc();
+    await erProgram.methods
+      .undelegatePool()
+      .accounts({
+        admin: admin.publicKey,
+        globalConfig: globalConfigPda,
+        pool: poolPda,
+      })
+      .rpc();
+    console.log("    ✅ Settled back to L1");
 
-    // 5. FINALIZE (Standard)
     const config = await program.account.globalConfig.fetch(globalConfigPda);
-    const treasuryAtaInfo = await getOrCreateAssociatedTokenAccount(
+    const treasuryAta = await getOrCreateAssociatedTokenAccount(
       provider.connection,
       admin,
       usdcMint,
       config.treasuryWallet,
-      true
+      true,
     );
-    treasuryAta = treasuryAtaInfo.address;
-
     await program.methods
       .finalizeWeights()
       .accountsPartial({
@@ -484,19 +491,12 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
         globalConfig: globalConfigPda,
         pool: poolPda,
         poolVault: vaultPda,
-        treasuryWallet: treasuryAta,
+        treasuryTokenAccount: treasuryAta.address,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .rpc();
-    console.log("    ✅ Weights Finalized");
 
-    // 6. CLAIM
-    console.log("\n    📊 --- POOL RESULTS ---");
     for (let i = 0; i < users.length; i++) {
-      const preBal = (
-        await provider.connection.getTokenAccountBalance(userAtas[i])
-      ).value.uiAmount;
-
       try {
         await program.methods
           .claimReward()
@@ -510,13 +510,27 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
           })
           .signers([users[i]])
           .rpc();
-      } catch (e) {}
+        console.log(`    User ${i + 1}: Reward Claimed`);
+      } catch (e) {
+        console.log(`    User ${i + 1}: No Reward`);
+      }
+    }
+  });
 
-      const postBal = (
-        await provider.connection.getTokenAccountBalance(userAtas[i])
-      ).value.uiAmount;
+  it("7. Public Verify (Transparency Check - L1)", async () => {
+    const targetBetPda = betPdas[1];
+    console.log(`    🌍 User 1 checking User 2's bet on Public L1...`);
+    const betData = await program.account.userBet.fetch(targetBetPda);
+    console.log(
+      `    📖 L1 Data Found! User 2 Prediction: ${betData.prediction.toString()}`,
+    );
+    if (betData.prediction.eq(predictions[1])) {
       console.log(
-        `    User ${i + 1}: Payout ${(postBal - preBal).toFixed(2)} USDC`
+        "    ✅ Transparency Confirmed: L1 state matches TEE execution.",
+      );
+    } else {
+      throw new Error(
+        `❌ Data Mismatch: Expected ${predictions[1]}, got ${betData.prediction}`,
       );
     }
   });

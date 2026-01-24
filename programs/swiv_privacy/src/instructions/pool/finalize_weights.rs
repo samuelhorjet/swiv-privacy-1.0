@@ -35,9 +35,9 @@ pub struct FinalizeWeights<'info> {
     /// CHECK: Validated against GlobalConfig
     #[account(
         mut, 
-        token::authority = global_config.treasury_wallet
+        constraint = treasury_token_account.owner == global_config.treasury_wallet
     )]
-    pub treasury_wallet: Account<'info, TokenAccount>,
+    pub treasury_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
 }
@@ -65,7 +65,7 @@ pub fn finalize_weights(ctx: Context<FinalizeWeights>) -> Result<()> {
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
                     from: ctx.accounts.pool_vault.to_account_info(),
-                    to: ctx.accounts.treasury_wallet.to_account_info(),
+                    to: ctx.accounts.treasury_token_account.to_account_info(),
                     authority: pool.to_account_info(),
                 },
                 signer,
