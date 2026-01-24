@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount};
 use crate::state::{Pool, GlobalConfig};
-use crate::constants::{SEED_GLOBAL_CONFIG, SEED_POOL, SEED_POOL_VAULT};
+use crate::constants::{SEED_GLOBAL_CONFIG, SEED_POOL, SEED_POOL_VAULT}; 
 use crate::errors::CustomError;
 use crate::events::PoolCreated;
 
@@ -12,7 +12,7 @@ use crate::events::PoolCreated;
     start_time: i64, 
     end_time: i64, 
     max_accuracy_buffer: u64,
-    conviction_bonus_bps: u64 
+    conviction_bonus_bps: u64
 )]
 pub struct CreatePool<'info> {
     #[account(
@@ -26,7 +26,7 @@ pub struct CreatePool<'info> {
     #[account(
         init,
         payer = admin,
-        space = 200 + (4 + name.len()) + (4 + metadata.as_ref().map(|s| s.len()).unwrap_or(0)),
+        space = 8 + 250, 
         seeds = [SEED_POOL, name.as_bytes()],
         bump
     )]
@@ -41,7 +41,7 @@ pub struct CreatePool<'info> {
         token::authority = pool,
     )]
     pub pool_vault: Account<'info, TokenAccount>,
-
+    
     pub token_mint: Account<'info, token::Mint>,
 
     #[account(mut)]
@@ -65,7 +65,7 @@ pub fn create_pool(
     conviction_bonus_bps: u64,
 ) -> Result<()> {
     require!(end_time > start_time, CustomError::DurationTooShort);
-    
+
     let pool = &mut ctx.accounts.pool;
     pool.admin = ctx.accounts.admin.key();
     pool.name = name.clone();
@@ -74,7 +74,6 @@ pub fn create_pool(
     pool.start_time = start_time;
     pool.end_time = end_time;
     pool.vault_balance = 0; 
-    
     pool.max_accuracy_buffer = max_accuracy_buffer;
     pool.conviction_bonus_bps = conviction_bonus_bps; 
     
@@ -83,9 +82,8 @@ pub fn create_pool(
     
     pool.total_weight = 0;
     pool.weight_finalized = false;
-
     pool.bump = ctx.bumps.pool;
-
+    
     emit!(PoolCreated {
         pool_name: name,
         start_time,

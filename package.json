@@ -7,7 +7,9 @@
   "dependencies": {
     "@arcium-hq/client": "0.5.4",
     "@coral-xyz/anchor": "^0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "^0.7.2",
+    "@magicblock-labs/ephemeral-rollups-sdk": "^0.8.3",
+    "@noble/ciphers": "^2.1.1",
+    "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
     "@pythnetwork/hermes-client": "^2.1.0",
     "@solana/spl-token": "^0.4.14",
@@ -16,7 +18,9 @@
     "axios": "^1.13.2",
     "crc": "^4.3.2",
     "dotenv": "^17.2.3",
-    "js-sha3": "^0.9.3"
+    "ed2curve": "^0.3.0",
+    "js-sha3": "^0.9.3",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",
