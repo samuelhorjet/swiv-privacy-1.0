@@ -210,7 +210,7 @@ describe("2. Pool Test (Mixed Single & Batch Ops)", () => {
       })
       .rpc();
 
-    console.log(`    ✅ Parimutuel Pool Created: ${POOL_NAME}`);
+    console.log(`    ✅ Pool Created: ${POOL_NAME}`);
   });
 
   it("Users 1-5 Place Bets", async () => {
