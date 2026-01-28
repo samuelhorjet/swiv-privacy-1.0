@@ -3,7 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 export const SEED_BET = Buffer.from("user_bet");
 export const SEED_POOL = Buffer.from("pool");
 export const SEED_POOL_VAULT = Buffer.from("pool_vault");
-export const SEED_PROTOCOL = Buffer.from("global_config_v1");
+export const SEED_PROTOCOL = Buffer.from("protocol_v2");
 
 export const TEE_VALIDATOR = new PublicKey("FnE6VJT5QNZdedZPnCoLsARgBwoE6DeJNjBs2H1gySXA");
 
