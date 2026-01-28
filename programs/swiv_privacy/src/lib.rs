@@ -71,7 +71,7 @@ pub mod swiv_privacy {
         instructions::delegation::delegate_bet_permission(ctx, request_id)
     }
 
-    // --- POOL LOGIC ---
+    // --- POOL ---
     pub fn create_pool(
         ctx: Context<CreatePool>,
         pool_id: u64,
@@ -94,6 +94,7 @@ pub mod swiv_privacy {
         )
     }
 
+    // --- BET ---
     pub fn place_bet(ctx: Context<PlaceBet>, prediction: u64, request_id: String) -> Result<()> {
         pool::place_bet(ctx, prediction, request_id)
     }
@@ -119,7 +120,6 @@ pub mod swiv_privacy {
         pool::claim_reward(ctx)
     }
 
-    // --- BET MANAGEMENT ---
     pub fn update_bet(ctx: Context<UpdateBet>, new_prediction: u64) -> Result<()> {
         pool::update_bet(ctx, new_prediction)
     }
