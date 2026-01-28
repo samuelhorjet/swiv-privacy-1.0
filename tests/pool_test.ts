@@ -92,8 +92,8 @@ describe("Swiv Privacy: Production Flow", () => {
   const requestIds = ["req_1", "req_2"];
   const betPdas: PublicKey[] = [];
 
-  const TEE_URL = "https://devnet-as.magicblock.app";
-  const TEE_WS_URL = "wss://devnet-as.magicblock.app";
+  const TEE_URL = "https://tee.magicblock.app";
+  const TEE_WS_URL = "wss://tee.magicblock.app";
 
   const ephemeralRpcEndpoint = (
     process.env.EPHEMERAL_PROVIDER_ENDPOINT || TEE_URL
