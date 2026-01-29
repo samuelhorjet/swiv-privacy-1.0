@@ -25,6 +25,7 @@ pub struct BetPlaced {
 pub struct BetUpdated {
     pub bet_address: Pubkey,
     pub user: Pubkey,
+    pub pool_identifier: String,
 }
 
 #[event]
@@ -43,18 +44,6 @@ pub struct BetUndelegated {
 #[event]
 pub struct PoolDelegated {
     pub pool_address: Pubkey,
-}
-
-#[event]
-pub struct PoolSecretsDelegated {
-    pub pool_address: Pubkey,
-    pub secrets_address: Pubkey,
-}
-
-#[event]
-pub struct PoolSecretsUndelegated {
-    pub pool_address: Pubkey,
-    pub secrets_address: Pubkey,
 }
 
 #[event]

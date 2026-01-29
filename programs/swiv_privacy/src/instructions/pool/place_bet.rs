@@ -32,11 +32,8 @@ pub fn place_bet(
 ) -> Result<()> {
     let user_bet = &mut ctx.accounts.user_bet;
     let pool = &ctx.accounts.pool;
-    let clock = Clock::get()?;
 
     require!(user_bet.status == BetStatus::Initialized, CustomError::BetAlreadyInitialized);
-
-    require!(clock.unix_timestamp < pool.end_time, CustomError::DurationTooShort); 
 
     user_bet.prediction = prediction;
     user_bet.status = BetStatus::Active;

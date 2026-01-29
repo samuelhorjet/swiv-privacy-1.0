@@ -14,7 +14,11 @@ pub struct BatchCalculateWeights<'info> {
 
     #[account(
         mut,
-        seeds = [SEED_POOL, pool.name.as_bytes()],
+        seeds = [
+            SEED_POOL, 
+            pool.admin.as_ref(), 
+            &pool.pool_id.to_le_bytes()
+        ],
         bump = pool.bump,
     )]
     pub pool: Account<'info, Pool>,

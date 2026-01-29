@@ -1,7 +1,7 @@
-use crate::constants::{SEED_PROTOCOL, SEED_POOL, SEED_POOL_VAULT};
+use crate::constants::{SEED_POOL, SEED_POOL_VAULT, SEED_PROTOCOL};
 use crate::errors::CustomError;
-use crate::state::{Protocol, Pool};
 use crate::events::WeightsFinalized;
+use crate::state::{Pool, Protocol};
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
@@ -79,7 +79,7 @@ pub fn finalize_weights(ctx: Context<FinalizeWeights>) -> Result<()> {
         }
     }
 
-    pool.vault_balance = distributable_amount; 
+    pool.vault_balance = distributable_amount;
     pool.weight_finalized = true;
 
     emit!(WeightsFinalized {
