@@ -15,6 +15,7 @@ export {
   getAuthToken, 
   PERMISSION_PROGRAM_ID, 
   DELEGATION_PROGRAM_ID, 
+  waitUntilPermissionActive,
   delegationRecordPdaFromDelegatedAccount, 
   delegationMetadataPdaFromDelegatedAccount, 
   delegateBufferPdaFromDelegatedAccountAndOwnerProgram 

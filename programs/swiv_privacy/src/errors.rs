@@ -24,8 +24,6 @@ pub enum CustomError {
     SeedMismatch,
     #[msg("Bet does not match the current pool/asset config")]
     PoolMismatch,
-    #[msg("Private Key must be 32 bytes long.")]
-    InvalidPrivateKey,
     #[msg("Admin force-settlement is not yet allowed for this bet.")]
     SettlementTooEarly,
     #[msg("Emergency refund timeout has not been met.")]
@@ -34,6 +32,4 @@ pub enum CustomError {
     NotCalculatedYet,
     #[msg("You must wait for the pool to end before undelegating to preserve privacy.")]
     UndelegationTooEarly,
-    #[msg("TEE failed to decrypt the prediction.")]
-    DecryptionFailed,
 }

@@ -29,11 +29,7 @@ pub fn update_bet(
 ) -> Result<()> {
     let user_bet = &mut ctx.accounts.user_bet;
     let pool = &ctx.accounts.pool; 
-    let clock = Clock::get()?;
 
-    require!(clock.unix_timestamp < pool.end_time, CustomError::AlreadyClaimed);
-
-    user_bet.creation_ts = clock.unix_timestamp;
     user_bet.update_count = user_bet.update_count.checked_add(1).unwrap();
     user_bet.prediction = new_prediction;
     
@@ -42,6 +38,7 @@ pub fn update_bet(
     emit!(BetUpdated {
         bet_address: user_bet.key(),
         user: ctx.accounts.user.key(),
+        pool_identifier: pool.name.clone(),
     });
 
     Ok(())
