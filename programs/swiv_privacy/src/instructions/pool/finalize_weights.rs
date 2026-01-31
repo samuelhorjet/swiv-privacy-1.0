@@ -42,7 +42,7 @@ pub fn finalize_weights(ctx: Context<FinalizeWeights>) -> Result<()> {
     let config = &ctx.accounts.protocol;
 
     require!(pool.is_resolved, CustomError::SettlementTooEarly);
-    require!(!pool.weight_finalized, CustomError::AlreadyClaimed);
+    require!(!pool.weight_finalized, CustomError::WeightsAlreadyFinalized);
 
     let total_assets = ctx.accounts.pool_vault.amount;
     let mut distributable_amount = total_assets;

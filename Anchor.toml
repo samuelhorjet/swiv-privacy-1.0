@@ -12,7 +12,7 @@ swiv_privacy = "8aAVXhM9uNdoijr7YJf3KG8yikHYdAUQZ6kmts9BBVLh"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "https://api.devnet.solana.com"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
