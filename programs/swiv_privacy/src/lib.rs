@@ -10,7 +10,11 @@ pub mod utils;
 
 use instructions::*;
 
+<<<<<<< HEAD
 declare_id!("5e4e9pooJgus8NcgdwZitZx1kF2vWZEA7MCTGi7BuKag");
+=======
+declare_id!("8aAVXhM9uNdoijr7YJf3KG8yikHYdAUQZ6kmts9BBVLh");
+>>>>>>> a8abaae5c40ec5e383b1f55dc88e7fef73a1fca2
 
 #[ephemeral]
 #[program]

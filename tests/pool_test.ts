@@ -68,7 +68,7 @@ async function getAuthTokenWithRetry(
   throw new Error("Unreachable");
 }
 
-describe("Swiv Privacy: Production Flow", () => {
+describe("Production Flow", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.SwivPrivacy as Program<SwivPrivacy>;
