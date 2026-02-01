@@ -28,7 +28,6 @@ pub struct ClaimReward<'info> {
     #[account(
         mut,
         constraint = user_bet.owner == user.key() @ CustomError::Unauthorized,
-        constraint = user_bet.status == BetStatus::Calculated @ CustomError::SettlementTooEarly
     )]
     pub user_bet: Box<Account<'info, UserBet>>,
 

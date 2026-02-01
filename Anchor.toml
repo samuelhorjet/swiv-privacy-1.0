@@ -6,13 +6,13 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-swiv_privacy = "8aAVXhM9uNdoijr7YJf3KG8yikHYdAUQZ6kmts9BBVLh"
+swiv_privacy = "5e4e9pooJgus8NcgdwZitZx1kF2vWZEA7MCTGi7BuKag"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "https://devnet.helius-rpc.com/?api-key=6dbe7d1c-6aa3-48f4-94ab-c79ad7c1e0f2"
+cluster = "https://devnet.helius-rpc.com/?api-key=06c61703-7238-4f81-8ad0-c57dee8e2fc0"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

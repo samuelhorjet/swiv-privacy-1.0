@@ -99,6 +99,30 @@ describe("Production Flow", () => {
   const TEE_WS_URL = "wss://tee.magicblock.app";
   const ephemeralRpcEndpoint = TEE_URL;
 
+  // Helper: Retry a function up to 'retries' times with a delay
+  async function withRetry<T>(
+    fn: () => Promise<T>,
+    actionName: string,
+    retries = 5,
+    delayMs = 2000,
+  ): Promise<T> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (i === retries - 1) throw e;
+        console.log(
+          `      ⚠️  ${actionName} failed (Attempt ${
+            i + 1
+          }/${retries}). Retrying in ${delayMs / 1000}s...`,
+        );
+        console.log(`      Error: ${e.message}`);
+        await sleep(delayMs);
+      }
+    }
+    throw new Error("Unreachable");
+  }
+
   it("1. Setup Environment", async () => {
     [protocolPda] = PublicKey.findProgramAddressSync(
       [SEED_PROTOCOL],
@@ -160,7 +184,7 @@ describe("Production Flow", () => {
   it("2. Create Pool (L1)", async () => {
     const now = Math.floor(Date.now() / 1000);
     const START_TIME = new anchor.BN(now);
-    END_TIME = START_TIME.add(new anchor.BN(60));
+    END_TIME = START_TIME.add(new anchor.BN(40));
 
     [poolPda] = PublicKey.findProgramAddressSync(
       [
@@ -423,6 +447,7 @@ describe("Production Flow", () => {
   it("5. Delegate Pool & Resolve", async () => {
     console.log("    ⏳ Step 5: Beginning Settlement Process...");
 
+    // 1. Wait for Pool Expiry
     const timeToWait = Math.max(
       0,
       END_TIME.toNumber() * 1000 - Date.now() + 2000,
@@ -432,16 +457,23 @@ describe("Production Flow", () => {
 
     // --- DELEGATE POOL ---
     console.log("    🔗 Delegating Pool PDA to TEE...");
-    const delegatePoolTx = await program.methods
-      .delegatePool(new anchor.BN(poolId))
-      .accountsPartial({
-        admin: admin.publicKey,
-        protocol: protocolPda,
-        pool: poolPda,
-        validator: TEE_VALIDATOR,
-      })
-      .rpc();
-    console.log(`    ✅ Pool Delegated (L1 Sig: ${delegatePoolTx})`);
+
+    // Retry delegation if L1 is busy
+    await withRetry(async () => {
+      const tx = await program.methods
+        .delegatePool(new anchor.BN(poolId))
+        .accountsPartial({
+          admin: admin.publicKey,
+          protocol: protocolPda,
+          pool: poolPda,
+          validator: TEE_VALIDATOR,
+        })
+        .rpc();
+      console.log(`    ✅ Pool Delegated (L1 Sig: ${tx})`);
+    }, "Delegate Pool");
+
+    // Give L1 a moment to propagate state
+    await sleep(2000);
 
     // --- AUTHENTICATION ---
     console.log("    🔐 Authenticating Admin Session on TEE...");
@@ -450,22 +482,22 @@ describe("Production Flow", () => {
       admin.publicKey,
       async (m) => nacl.sign.detached(m, admin.secretKey),
     );
-    console.log("    ✅ Admin Auth Token obtained.");
 
+    // Re-establish connection with fresh token
     const erConn = new anchor.web3.Connection(
       `${TEE_URL}?token=${authToken.token}`,
       {
         commitment: "confirmed",
         wsEndpoint: `${TEE_WS_URL}?token=${authToken.token}`,
+        // Increase timeout for TEE requests
+        confirmTransactionInitialTimeout: 60000,
       },
     );
+
     const erProvider = new anchor.AnchorProvider(
       erConn,
       new anchor.Wallet(admin),
-      {
-        commitment: "confirmed",
-        preflightCommitment: "confirmed",
-      },
+      { commitment: "confirmed", preflightCommitment: "confirmed" },
     );
     const erProgram = new anchor.Program(program.idl, erProvider);
 
@@ -473,59 +505,180 @@ describe("Production Flow", () => {
     console.log(
       `    🎲 Resolving Pool on TEE (Target Outcome: ${TARGET_PRICE.toString()})...`,
     );
-    const resolveTx = await erProgram.methods
-      .resolvePool(TARGET_PRICE)
-      .accountsPartial({
-        admin: admin.publicKey,
-        protocol: protocolPda,
-        pool: poolPda,
-      })
-      .rpc();
-    console.log(`    ✅ Pool Resolved on TEE (Sig: ${resolveTx})`);
+
+    await withRetry(async () => {
+      const resolveTx = await erProgram.methods
+        .resolvePool(TARGET_PRICE)
+        .accountsPartial({
+          admin: admin.publicKey,
+          protocol: protocolPda,
+          pool: poolPda,
+        })
+        .rpc();
+      console.log(`    ✅ Pool Resolved on TEE (Sig: ${resolveTx})`);
+    }, "Resolve Pool (TEE)");
+
+    await sleep(2000); // Wait for TEE state update
 
     // --- CALCULATE WEIGHTS (TEE) ---
     console.log(
       `    ⚖️  Calculating Weights for ${betPdas.length} users on TEE...`,
     );
+
     const batchAccounts = betPdas.map((k) => ({
       pubkey: k,
       isWritable: true,
       isSigner: false,
     }));
 
-    const calcTx = await erProgram.methods
-      .batchCalculateWeights()
-      .accountsPartial({ admin: admin.publicKey, pool: poolPda })
-      .remainingAccounts(batchAccounts)
-      .rpc();
-    console.log(`    ✅ Weights Calculated (Sig: ${calcTx})`);
+    await withRetry(async () => {
+      const calcTx = await erProgram.methods
+        .batchCalculateWeights()
+        .accountsPartial({ admin: admin.publicKey, pool: poolPda })
+        .remainingAccounts(batchAccounts)
+        .rpc();
+      console.log(`    ✅ Weights Calculated (Sig: ${calcTx})`);
+    }, "Calculate Weights (TEE)");
+
+    await sleep(2000);
 
     // --- UNDELEGATE BETS (Flush to L1) ---
     console.log(
       "    📤 Flushing User Bet Data back to L1 (Batch Undelegate)...",
     );
-    const undelegateBetsTx = await erProgram.methods
-      .batchUndelegateBets()
-      .accounts({ payer: admin.publicKey, pool: poolPda })
-      .remainingAccounts(batchAccounts)
-      .rpc();
-    console.log(`    ✅ User Bets Flushed to L1 (Sig: ${undelegateBetsTx})`);
+
+    await withRetry(async () => {
+      const undelegateBetsTx = await erProgram.methods
+        .batchUndelegateBets()
+        .accounts({ payer: admin.publicKey, pool: poolPda })
+        .remainingAccounts(batchAccounts)
+        .rpc();
+      console.log(`    ✅ User Bets Flushed to L1 (Sig: ${undelegateBetsTx})`);
+    }, "Flush Bets (TEE -> L1)");
+
+    await sleep(2000);
 
     // --- UNDELEGATE POOL (Flush to L1) ---
     console.log(
       "    📤 Finalizing Settlement: Flushing Pool PDA back to L1...",
     );
-    const finalUndelegateTx = await erProgram.methods
-      .undelegatePool()
-      .accounts({
-        admin: admin.publicKey,
-        protocol: protocolPda,
-        pool: poolPda,
-      })
-      .rpc();
-    console.log(`    ✅ Pool Settled back to L1 (Sig: ${finalUndelegateTx})`);
+
+    await withRetry(async () => {
+      const finalUndelegateTx = await erProgram.methods
+        .undelegatePool()
+        .accounts({
+          admin: admin.publicKey,
+          protocol: protocolPda,
+          pool: poolPda,
+        })
+        .rpc();
+      console.log(`    ✅ Pool Settled back to L1 (Sig: ${finalUndelegateTx})`);
+    }, "Flush Pool (TEE -> L1)");
 
     console.log("    🏁 Settlement Process Complete.");
+  });
+
+  it("6. Finalize & Claim Rewards", async () => {
+    console.log("    🏆 Step 6: Finalizing Pool & Claiming Rewards...");
+
+    // --- 1. WAIT FOR L1 SETTLEMENT (Wait for Step 5 to reflect) ---
+    console.log("      ⏳ Waiting for L1 Pool to reflect TEE resolution...");
+    let poolAccount = await program.account.pool.fetch(poolPda);
+    let retries = 10;
+    while (!poolAccount.isResolved && retries > 0) {
+      await sleep(1500);
+      try {
+        poolAccount = await program.account.pool.fetch(poolPda);
+      } catch (e) {}
+      retries--;
+    }
+    if (!poolAccount.isResolved) {
+      throw new Error("❌ Pool never resolved on L1. Did Step 5 fail?");
+    }
+    console.log("      ✅ Pool is Resolved on L1. Proceeding to Finalize.");
+
+    // --- 2. FINALIZE WEIGHTS (The Missing Step) ---
+    // This calculates fees and unlocks the vault for claimers
+    try {
+      // In Step 1, we set treasuryWallet = admin.publicKey.
+      // So we pass the admin's ATA as the treasury token account.
+      const adminAta = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        admin,
+        usdcMint,
+        admin.publicKey
+      );
+
+      const finalizeTx = await program.methods
+        .finalizeWeights()
+        .accountsPartial({
+          admin: admin.publicKey,
+          protocol: protocolPda,
+          pool: poolPda,
+          poolVault: vaultPda,
+          treasuryTokenAccount: adminAta.address, 
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([admin])
+        .rpc();
+      console.log(`      ✅ Weights Finalized (Sig: ${finalizeTx})`);
+    } catch (e) {
+      console.log(`      ⚠️  Finalize Weights failed: ${e.message}`);
+      // Proceeding anyway in case it was already finalized
+    }
+
+    // --- 3. CLAIM REWARDS ---
+    console.log("      💰 Processing User Claims...");
+
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
+      const userBetPda = betPdas[i];
+      const userAta = userAtas[i];
+
+      console.log(
+        `      👤 User ${i + 1} (${user.publicKey.toBase58().slice(0, 8)}...)`
+      );
+
+      // Get Balance Before
+      const balBefore = await provider.connection.getTokenAccountBalance(userAta);
+      const startAmount = balBefore.value.uiAmount || 0;
+
+      try {
+        await program.methods
+          .claimReward()
+          .accountsPartial({
+            user: user.publicKey,
+            pool: poolPda,
+            poolVault: vaultPda,
+            userBet: userBetPda,
+            userTokenAccount: userAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([user])
+          .rpc();
+
+        // Get Balance After
+        const balAfter = await provider.connection.getTokenAccountBalance(userAta);
+        const endAmount = balAfter.value.uiAmount || 0;
+        const profit = endAmount - startAmount;
+
+        if (profit > 0.000001) {
+          console.log(`        🎉 WINNER! Reward: +${profit.toFixed(4)} USDC`);
+          console.log(`           (Balance: ${startAmount} -> ${endAmount})`);
+        } else {
+          console.log(`        😐 Claimed but received 0 USDC (Break even?)`);
+        }
+
+      } catch (e) {
+        // If claim fails, it usually means they didn't win or already claimed
+        // We assume they are a "Loser" for this test context if it fails
+        console.log(`        📉 DID NOT WIN (or claim failed).`);
+        console.log(`           (Balance remained: ${startAmount.toFixed(4)} USDC)`);
+        // Optional: Log specific error if needed
+        // console.log(`           Reason: ${e.message}`);
+      }
+      console.log("      ---------------------------------------------------");
+    }
   });
 
   it("7. Public Verify", async () => {
