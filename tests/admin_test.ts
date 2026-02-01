@@ -12,13 +12,6 @@ describe("1. Setup & Admin", () => {
   const admin = (provider.wallet as anchor.Wallet).payer;
 
   it("Global Protocol Initialization", async () => {
-    const usdcMint = await createMint(
-      provider.connection,
-      admin,
-      admin.publicKey,
-      null,
-      6
-    );
     const [configPda] = PublicKey.findProgramAddressSync(
       [SEED_PROTOCOL],
       program.programId
