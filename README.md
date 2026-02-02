@@ -10,6 +10,18 @@ The protocol separates **private execution** from **public settlement**:
 * Sensitive user actions happen inside a **private ephemeral rollup**
 * Only finalized, aggregated results are committed to Solana L1
 
+#### Frontend Repo: 
+
+[https://github.com/swiv-labs/Frontend](https://github.com/swiv-labs/Frontend)
+
+#### Backend Repo:
+
+[https://github.com/swiv-labs/Backend](https://github.com/swiv-labs/Backend)
+
+#### Demo Video:
+
+[https://youtu.be/IB5Ptia9SeI?si=g1wYQDfLLjf_di2s](https://youtu.be/IB5Ptia9SeI?si=g1wYQDfLLjf_di2s)
+
 ---
 
 ## 2. Core Architecture
