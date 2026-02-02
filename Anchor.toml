@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-swiv_privacy = "5e4e9pooJgus8NcgdwZitZx1kF2vWZEA7MCTGi7BuKag"
+swiv_privacy = "8aAVXhM9uNdoijr7YJf3KG8yikHYdAUQZ6kmts9BBVLh"
 
 [registry]
 url = "https://api.apr.dev"
