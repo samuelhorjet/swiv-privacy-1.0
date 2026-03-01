@@ -24,7 +24,7 @@ describe("1. Setup & Admin", () => {
           admin: admin.publicKey,
           treasuryWallet: admin.publicKey,
           systemProgram: SystemProgram.programId,
-        })
+        }) 
         .rpc();
       console.log("    ✅ Protocol Initialized");
     } catch (e) {
