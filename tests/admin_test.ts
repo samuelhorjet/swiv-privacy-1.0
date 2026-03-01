@@ -17,7 +17,9 @@ describe("1. Setup & Admin", () => {
       program.programId
     );
 
-    try {
+    const existingProtocol = await program.account.protocol.fetchNullable(configPda);
+
+    if (!existingProtocol) {
       await program.methods
         .initializeProtocol(new anchor.BN(300))
         .accountsPartial({
@@ -27,9 +29,8 @@ describe("1. Setup & Admin", () => {
         }) 
         .rpc();
       console.log("    ✅ Protocol Initialized");
-    } catch (e) {
-      try {
-        await program.methods
+    } else {
+      await program.methods
         .updateConfig(null, new anchor.BN(300))
         .accountsPartial({
           admin: admin.publicKey,
@@ -38,9 +39,6 @@ describe("1. Setup & Admin", () => {
         })
         .rpc();
       console.log("    ✅ Protocol Config Updated");
-      } catch (e) {
-        console.error("    ❌ Protocol Initialization/Update Failed", e);
-      }
     }
   });
 });
