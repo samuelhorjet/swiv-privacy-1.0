@@ -30,7 +30,7 @@ import {
   delegationRecordPdaFromDelegatedAccount,
   delegationMetadataPdaFromDelegatedAccount,
   delegateBufferPdaFromDelegatedAccountAndOwnerProgram,
-  waitUntilPermissionActive, // Added this helper
+  waitUntilPermissionActive, 
 } from "./utils";
 import * as nacl from "tweetnacl";
 
@@ -86,11 +86,11 @@ describe("Production Flow", () => {
   let vaultPda: PublicKey;
   let poolId: number = 0;
 
-  const POOL_NAME = `TEE-Pool-${Math.floor(Math.random() * 1000)}`;
+  const POOL_TITLE = `TEE-Pool-${Math.floor(Math.random() * 1000)}`;
   let END_TIME: anchor.BN;
-  const TARGET_PRICE = new anchor.BN(200_000_000);
+  const TARGET_PRICE = new anchor.BN(75);
 
-  const predictions = [new anchor.BN(200_000_000), new anchor.BN(250_000_000)];
+  const predictions = [new anchor.BN(76), new anchor.BN(80)];
   const requestIds = ["req_1", "req_2"];
   const betPdas: PublicKey[] = [];
   const permissionPdas: PublicKey[] = [];
@@ -112,8 +112,7 @@ describe("Production Flow", () => {
       } catch (e) {
         if (i === retries - 1) throw e;
         console.log(
-          `      ⚠️  ${actionName} failed (Attempt ${
-            i + 1
+          `      ⚠️  ${actionName} failed (Attempt ${i + 1
           }/${retries}). Retrying in ${delayMs / 1000}s...`,
         );
         console.log(`      Error: ${e.message}`);
@@ -175,7 +174,7 @@ describe("Production Flow", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
-    } catch (e) {}
+    } catch (e) { }
 
     const protocol = await program.account.protocol.fetch(protocolPda);
     poolId = protocol.totalPools.toNumber();
@@ -209,20 +208,19 @@ describe("Production Flow", () => {
     await program.methods
       .createPool(
         new anchor.BN(poolId),
-        POOL_NAME,
-        "BTC/USDC",
+        POOL_TITLE,
         START_TIME,
         END_TIME,
-        new anchor.BN(500),
-        new anchor.BN(1000),
+        new anchor.BN(10),
+        new anchor.BN(3),
       )
       .accountsPartial({
         protocol: protocolPda,
         pool: poolPda,
         poolVault: vaultPda,
         tokenMint: usdcMint,
-        admin: admin.publicKey,
-        adminTokenAccount: adminAta.address,
+        createdBy: admin.publicKey,
+        createdByTokenAccount: adminAta.address,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -268,7 +266,7 @@ describe("Production Flow", () => {
             pool: poolPda,
             poolVault: vaultPda,
             userTokenAccount: userAtas[i],
-            userBet: betPda,
+            bet: betPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -364,7 +362,7 @@ describe("Production Flow", () => {
         .accountsPartial({
           user: user.publicKey,
           pool: poolPda,
-          userBet: betPda,
+          bet: betPda,
         })
         .instruction();
 
@@ -584,12 +582,36 @@ describe("Production Flow", () => {
     // --- 1. WAIT FOR L1 SETTLEMENT (Wait for Step 5 to reflect) ---
     console.log("      ⏳ Waiting for L1 Pool to reflect TEE resolution...");
     let poolAccount = await program.account.pool.fetch(poolPda);
+    const formattedPoolAccount = {
+      poolId: poolAccount.poolId.toNumber(),
+      createdBy: poolAccount.createdBy.toBase58(),
+      title: poolAccount.title,
+      stakeTokenMint: poolAccount.stakeTokenMint.toBase58(),
+
+      startTime: poolAccount.startTime.toNumber(),
+      endTime: poolAccount.endTime.toNumber(),
+
+      maxAccuracyBuffer: poolAccount.maxAccuracyBuffer.toNumber(),
+      convictionBonusBps: poolAccount.convictionBonusBps.toNumber(),
+
+      totalVolume: poolAccount.totalVolume.toString(),
+      resolutionResult: poolAccount.resolutionResult?.toString() ?? null,
+
+      isResolved: poolAccount.isResolved,
+      resolutionTs: poolAccount.resolutionTs?.toNumber() ?? null,
+
+      totalWeight: poolAccount.totalWeight?.toString() ?? "0",
+
+      weightFinalized: poolAccount.weightFinalized,
+      totalParticipants: poolAccount.totalParticipants.toNumber(),
+    }
+    console.log("      🔍 Initial Pool isResolved:", formattedPoolAccount);
     let retries = 10;
     while (!poolAccount.isResolved && retries > 0) {
       await sleep(1500);
       try {
         poolAccount = await program.account.pool.fetch(poolPda);
-      } catch (e) {}
+      } catch (e) { }
       retries--;
     }
     if (!poolAccount.isResolved) {
@@ -616,7 +638,7 @@ describe("Production Flow", () => {
           protocol: protocolPda,
           pool: poolPda,
           poolVault: vaultPda,
-          treasuryTokenAccount: adminAta.address, 
+          treasuryTokenAccount: adminAta.address,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([admin])
@@ -650,7 +672,7 @@ describe("Production Flow", () => {
             user: user.publicKey,
             pool: poolPda,
             poolVault: vaultPda,
-            userBet: userBetPda,
+            bet: userBetPda,
             userTokenAccount: userAta,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
@@ -682,7 +704,7 @@ describe("Production Flow", () => {
   });
 
   it("7. Public Verify", async () => {
-    const betData = await program.account.userBet.fetch(betPdas[1]);
+    const betData = await program.account.bet.fetch(betPdas[1]);
     console.log(`    📖 L1 Prediction: ${betData.prediction.toString()}`);
     if (!betData.prediction.eq(predictions[1])) {
       throw new Error(

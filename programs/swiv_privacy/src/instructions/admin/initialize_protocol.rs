@@ -38,7 +38,6 @@ pub fn initialize_protocol(
     protocol.protocol_fee_bps = protocol_fee_bps;
     
     protocol.paused = false;
-    protocol.total_users = 0;
     protocol.total_pools = 0;
     protocol.batch_settle_wait_duration = 60; 
 

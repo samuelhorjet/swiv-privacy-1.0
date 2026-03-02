@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use crate::state::{Protocol, Pool, UserBet, BetStatus};
+use crate::state::{Protocol, Pool, Bet, BetStatus};
 use crate::constants::{SEED_BET, SEED_POOL, SEED_POOL_VAULT, SEED_PROTOCOL}; 
 use crate::errors::CustomError;
 
@@ -19,7 +19,7 @@ pub struct InitBet<'info> {
 
     #[account(
         mut,
-        seeds = [SEED_POOL, pool.admin.as_ref(), &(pool.pool_id.to_le_bytes())],
+        seeds = [SEED_POOL, pool.created_by.as_ref(), &(pool.pool_id.to_le_bytes())],
         bump = pool.bump
     )]
     pub pool: Box<Account<'info, Pool>>,
@@ -38,11 +38,11 @@ pub struct InitBet<'info> {
     #[account(
         init,
         payer = user,
-        space = UserBet::SPACE,
+        space = Bet::SPACE,
         seeds = [SEED_BET, pool.key().as_ref(), user.key().as_ref(), request_id.as_bytes()], 
         bump
     )]
-    pub user_bet: Box<Account<'info, UserBet>>,
+    pub bet: Box<Account<'info, Bet>>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -73,22 +73,22 @@ pub fn init_bet(
         amount,
     )?;
 
-    pool.vault_balance = pool.vault_balance.checked_add(amount).unwrap();
+    pool.total_volume = pool.total_volume.checked_add(amount).unwrap();
     pool.total_participants = pool.total_participants.checked_add(1).unwrap();
 
-    let user_bet = &mut ctx.accounts.user_bet;
-    user_bet.owner = ctx.accounts.user.key();
-    user_bet.pool = pool_key;
-    user_bet.deposit = amount; 
-    user_bet.end_timestamp = pool.end_time;
-    user_bet.creation_ts = clock.unix_timestamp; 
-    user_bet.update_count = 0;                   
-    user_bet.calculated_weight = 0;
-    user_bet.is_weight_added = false;
+    let bet = &mut ctx.accounts.bet;
+    bet.user_pubkey = ctx.accounts.user.key();
+    bet.pool_pubkey = pool_key;
+    bet.stake = amount; 
+    bet.end_timestamp = pool.end_time;
+    bet.creation_ts = clock.unix_timestamp; 
+    bet.update_count = 0;                   
+    bet.calculated_weight = 0;
+    bet.is_weight_added = false;
     
-    user_bet.status = BetStatus::Initialized;
-    user_bet.prediction = 0; 
-    user_bet.bump = ctx.bumps.user_bet;
+    bet.status = BetStatus::Pending;
+    bet.prediction = 0; 
+    bet.bump = ctx.bumps.bet;
 
     msg!("Bet Initialized on L1. Funds Secured.");
 

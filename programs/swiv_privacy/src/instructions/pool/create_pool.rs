@@ -8,8 +8,7 @@ use crate::events::PoolCreated;
 #[derive(Accounts)]
 #[instruction(
     pool_id: u64,
-    name: String, 
-    metadata: Option<String>, 
+    title: String, 
     start_time: i64, 
     end_time: i64, 
     max_accuracy_buffer: u64,
@@ -20,22 +19,22 @@ pub struct CreatePool<'info> {
         mut,
         seeds = [SEED_PROTOCOL],
         bump,
-        constraint = protocol.admin == admin.key() @ CustomError::Unauthorized
+        constraint = protocol.admin == created_by.key() @ CustomError::Unauthorized
     )]
     pub protocol: Account<'info, Protocol>,
 
     #[account(
         init,
-        payer = admin,
+        payer = created_by,
         space = 8 + 300, 
-        seeds = [SEED_POOL, admin.key().as_ref(), &pool_id.to_le_bytes()],
+        seeds = [SEED_POOL, created_by.key().as_ref(), &pool_id.to_le_bytes()],
         bump
     )]
     pub pool: Account<'info, Pool>,
 
     #[account(
         init,
-        payer = admin,
+        payer = created_by,
         seeds = [SEED_POOL_VAULT, pool.key().as_ref()],
         bump,
         token::mint = token_mint,
@@ -46,10 +45,10 @@ pub struct CreatePool<'info> {
     pub token_mint: Account<'info, token::Mint>,
 
     #[account(mut)]
-    pub admin: Signer<'info>,
+    pub created_by: Signer<'info>,
 
     #[account(mut)]
-    pub admin_token_account: Account<'info, TokenAccount>,
+    pub created_by_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -59,8 +58,7 @@ pub struct CreatePool<'info> {
 pub fn create_pool(
     ctx: Context<CreatePool>,
     pool_id: u64,
-    name: String,
-    metadata: Option<String>,
+    title: String,
     start_time: i64,
     end_time: i64,
     max_accuracy_buffer: u64,
@@ -71,20 +69,19 @@ pub fn create_pool(
     let pool = &mut ctx.accounts.pool;
     let protocol = &mut ctx.accounts.protocol;
     
-    pool.admin = ctx.accounts.admin.key();
-    pool.name = name.clone();
+    pool.created_by = ctx.accounts.created_by.key();
+    pool.title = title.clone();
     pool.pool_id = pool_id;
-    pool.metadata = metadata;
-    pool.token_mint = ctx.accounts.token_mint.key();
+    pool.stake_token_mint = ctx.accounts.token_mint.key();
     pool.start_time = start_time;
     pool.end_time = end_time;
-    pool.vault_balance = 0;
+    pool.total_volume = 0;
     pool.total_participants = 0;
     pool.max_accuracy_buffer = max_accuracy_buffer;
     pool.conviction_bonus_bps = conviction_bonus_bps; 
     
     pool.is_resolved = false;
-    pool.resolution_target = 0;
+    pool.resolution_result = 0;
     
     pool.total_weight = 0;
     pool.weight_finalized = false;
@@ -93,7 +90,7 @@ pub fn create_pool(
     protocol.total_pools = protocol.total_pools.checked_add(1).unwrap();
     
     emit!(PoolCreated {
-        pool_name: name,
+        pool_name: title,
         start_time,
         end_time,
     });

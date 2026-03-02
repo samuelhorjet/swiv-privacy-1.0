@@ -18,7 +18,7 @@ pub struct ResolvePool<'info> {
 
     #[account(
         mut,
-        seeds = [SEED_POOL, pool.admin.as_ref(), &(pool.pool_id.to_le_bytes())],
+        seeds = [SEED_POOL, pool.created_by.as_ref(), &(pool.pool_id.to_le_bytes())],
         bump = pool.bump
     )]
     pub pool: Account<'info, Pool>,
@@ -32,14 +32,14 @@ pub fn resolve_pool(ctx: Context<ResolvePool>, final_outcome: u64) -> Result<()>
     let clock = Clock::get()?;
     require!(clock.unix_timestamp >= pool.end_time, CustomError::DurationTooShort);
 
-    pool.resolution_target = final_outcome;
+    pool.resolution_result = final_outcome;
     pool.is_resolved = true;
     
     pool.resolution_ts = clock.unix_timestamp; 
     pool.weight_finalized = false; 
     
     emit!(PoolResolved {
-        pool_name: pool.name.clone(),
+        pool_name: pool.title.clone(),
         final_outcome,
         resolution_ts: pool.resolution_ts,
     });

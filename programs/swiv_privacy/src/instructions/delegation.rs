@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::state::{UserBet, Protocol, Pool}; 
+use crate::state::{Bet, Protocol, Pool}; 
 use crate::constants::{SEED_BET, SEED_POOL, SEED_PROTOCOL}; 
 use crate::errors::CustomError;
 use crate::events::{
@@ -113,8 +113,8 @@ pub fn delegate_bet_permission(ctx: Context<DelegateBetPermission>, request_id: 
     let (pool_pubkey, owner, bump) = {
         let user_bet_data = ctx.accounts.user_bet.try_borrow_data()?;
         let mut data_slice: &[u8] = &user_bet_data;
-        let user_bet = UserBet::try_deserialize(&mut data_slice)?;
-        (user_bet.pool, user_bet.owner, user_bet.bump)
+        let bet = Bet::try_deserialize(&mut data_slice)?;
+        (bet.pool_pubkey, bet.user_pubkey, bet.bump)
     };
 
     require!(owner == ctx.accounts.user.key(), CustomError::Unauthorized);
@@ -171,8 +171,8 @@ pub fn delegate_bet(ctx: Context<DelegateBet>, request_id: String) -> Result<()>
     let (pool_pubkey, owner) = {
         let user_bet_data = ctx.accounts.user_bet.try_borrow_data()?;
         let mut data_slice: &[u8] = &user_bet_data;
-        let user_bet = UserBet::try_deserialize(&mut data_slice)?;
-        (user_bet.pool, user_bet.owner)
+        let bet = Bet::try_deserialize(&mut data_slice)?;
+        (bet.pool_pubkey, bet.user_pubkey)
     }; 
 
     require!(owner == ctx.accounts.user.key(), CustomError::Unauthorized);
@@ -250,7 +250,7 @@ pub struct BatchUndelegateBets<'info> {
 
     #[account(
         mut,
-        seeds = [SEED_POOL, pool.admin.as_ref(), &(pool.pool_id.to_le_bytes())],
+        seeds = [SEED_POOL, pool.created_by.as_ref(), &(pool.pool_id.to_le_bytes())],
         bump = pool.bump
     )]
     pub pool: Account<'info, Pool>,

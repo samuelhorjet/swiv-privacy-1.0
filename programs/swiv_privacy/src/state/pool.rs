@@ -2,21 +2,19 @@ use anchor_lang::prelude::*;
 
 #[account]
 pub struct Pool {
-    pub admin: Pubkey,
-    pub name: String,
+    pub created_by: Pubkey,
+    pub title: String,
     pub pool_id: u64,
-    pub token_mint: Pubkey,
+    pub stake_token_mint: Pubkey,
     
     pub start_time: i64,
     pub end_time: i64,
-    pub vault_balance: u64,
+    pub total_volume: u64,
     
     pub max_accuracy_buffer: u64,
     pub conviction_bonus_bps: u64, 
-    
-    pub metadata: Option<String>,
 
-    pub resolution_target: u64,
+    pub resolution_result: u64,
     pub is_resolved: bool,
     pub resolution_ts: i64,
     

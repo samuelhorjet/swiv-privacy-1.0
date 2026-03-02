@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use crate::state::{UserBet, Pool, BetStatus};
+use crate::state::{Bet, Pool, BetStatus};
 use crate::constants::{SEED_POOL, SEED_POOL_VAULT};
 use crate::errors::CustomError;
 use crate::events::BetRefunded;
@@ -14,14 +14,14 @@ pub struct EmergencyRefund<'info> {
 
     #[account(
         mut,
-        constraint = user_bet.owner == user.key() @ CustomError::Unauthorized,
-        constraint = user_bet.status != BetStatus::Claimed @ CustomError::AlreadyClaimed
+        constraint = bet.user_pubkey == user.key() @ CustomError::Unauthorized,
+        constraint = bet.status != BetStatus::Claimed @ CustomError::AlreadyClaimed
     )]
-    pub user_bet: Box<Account<'info, UserBet>>,
+    pub bet: Box<Account<'info, Bet>>,
 
     #[account(
         mut,
-        seeds = [SEED_POOL, pool.admin.as_ref(), &(pool.pool_id.to_le_bytes())],
+        seeds = [SEED_POOL, pool.created_by.as_ref(), &(pool.pool_id.to_le_bytes())],
         bump = pool.bump
     )]
     pub pool: Box<Account<'info, Pool>>,
@@ -36,7 +36,7 @@ pub struct EmergencyRefund<'info> {
 
     #[account(
         mut,
-        token::mint = pool.token_mint
+        token::mint = pool.stake_token_mint
     )]
     pub user_token_account: Box<Account<'info, TokenAccount>>,
 
@@ -44,23 +44,23 @@ pub struct EmergencyRefund<'info> {
 }
 
 pub fn emergency_refund(ctx: Context<EmergencyRefund>) -> Result<()> {
-    let user_bet = &mut ctx.accounts.user_bet;
+    let bet = &mut ctx.accounts.bet;
     let pool = &mut ctx.accounts.pool;
     let clock = Clock::get()?;
 
     require!(
-        clock.unix_timestamp > user_bet.end_timestamp + REFUND_TIMEOUT_SECONDS,
+        clock.unix_timestamp > bet.end_timestamp + REFUND_TIMEOUT_SECONDS,
         CustomError::TimeoutNotMet
     );
 
 
-    let refund_amount = user_bet.deposit;
+    let refund_amount = bet.stake;
 
     if refund_amount > 0 {
-        let admin_bytes = pool.admin.as_ref();
+        let created_by_bytes = pool.created_by.as_ref();
         let pool_id_bytes = pool.pool_id.to_le_bytes();
         let bump = pool.bump;
-        let seeds = &[SEED_POOL, admin_bytes, &pool_id_bytes, &[bump]];
+        let seeds = &[SEED_POOL, created_by_bytes, &pool_id_bytes, &[bump]];
         let signer = &[&seeds[..]];
 
         token::transfer(
@@ -76,13 +76,13 @@ pub fn emergency_refund(ctx: Context<EmergencyRefund>) -> Result<()> {
             refund_amount,
         )?;
         
-        pool.vault_balance = pool.vault_balance.checked_sub(refund_amount).unwrap();
+        pool.total_volume = pool.total_volume.checked_sub(refund_amount).unwrap();
     }
 
-    user_bet.status = BetStatus::Claimed;
+    bet.status = BetStatus::Claimed;
     
     emit!(BetRefunded {
-        bet_address: user_bet.key(),
+        bet_address: bet.key(),
         user: ctx.accounts.user.key(),
         amount: refund_amount,
         is_emergency: true,

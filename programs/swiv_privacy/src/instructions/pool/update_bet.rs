@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::state::{UserBet, Pool, BetStatus};
+use crate::state::{Bet, Pool, BetStatus};
 use crate::constants::{SEED_POOL};
 use crate::errors::CustomError;
 use crate::events::BetUpdated;
@@ -11,13 +11,13 @@ pub struct UpdateBet<'info> {
 
     #[account(
         mut,
-        constraint = user_bet.owner == user.key() @ CustomError::Unauthorized,
-        constraint = user_bet.status == BetStatus::Active @ CustomError::AlreadyClaimed
+        constraint = bet.user_pubkey == user.key() @ CustomError::Unauthorized,
+        constraint = bet.status == BetStatus::Active @ CustomError::AlreadyClaimed
     )]
-    pub user_bet: Box<Account<'info, UserBet>>,
+    pub bet: Box<Account<'info, Bet>>,
 
     #[account(
-        seeds = [SEED_POOL, pool.admin.as_ref(), &(pool.pool_id.to_le_bytes())],
+        seeds = [SEED_POOL, pool.created_by.as_ref(), &(pool.pool_id.to_le_bytes())],
         bump = pool.bump
     )]
     pub pool: Box<Account<'info, Pool>>,
@@ -27,18 +27,18 @@ pub fn update_bet(
     ctx: Context<UpdateBet>,
     new_prediction: u64, 
 ) -> Result<()> {
-    let user_bet = &mut ctx.accounts.user_bet;
+    let bet = &mut ctx.accounts.bet;
     let pool = &ctx.accounts.pool; 
 
-    user_bet.update_count = user_bet.update_count.checked_add(1).unwrap();
-    user_bet.prediction = new_prediction;
+    bet.update_count = bet.update_count.checked_add(1).unwrap();
+    bet.prediction = new_prediction;
     
     msg!("Bet Updated securely via TEE. New prediction stored: {}", new_prediction);
 
     emit!(BetUpdated {
-        bet_address: user_bet.key(),
+        bet_address: bet.key(),
         user: ctx.accounts.user.key(),
-        pool_identifier: pool.name.clone(),
+        pool_identifier: pool.title.clone(),
     });
 
     Ok(())

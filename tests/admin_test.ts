@@ -17,17 +17,19 @@ describe("1. Setup & Admin", () => {
       program.programId
     );
 
-    try {
+    const existingProtocol = await program.account.protocol.fetchNullable(configPda);
+
+    if (!existingProtocol) {
       await program.methods
         .initializeProtocol(new anchor.BN(300))
         .accountsPartial({
           admin: admin.publicKey,
           treasuryWallet: admin.publicKey,
           systemProgram: SystemProgram.programId,
-        })
+        }) 
         .rpc();
       console.log("    ✅ Protocol Initialized");
-    } catch (e) {
+    } else {
       await program.methods
         .updateConfig(null, new anchor.BN(300))
         .accountsPartial({

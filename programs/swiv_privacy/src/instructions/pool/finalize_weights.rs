@@ -18,7 +18,7 @@ pub struct FinalizeWeights<'info> {
 
     #[account(
         mut,
-        seeds = [SEED_POOL, pool.admin.as_ref(), &(pool.pool_id.to_le_bytes())],
+        seeds = [SEED_POOL, pool.created_by.as_ref(), &(pool.pool_id.to_le_bytes())],
         bump = pool.bump,
     )]
     pub pool: Account<'info, Pool>,
@@ -56,10 +56,10 @@ pub fn finalize_weights(ctx: Context<FinalizeWeights>) -> Result<()> {
             .unwrap() as u64;
 
         if fee_amount > 0 {
-            let admin_bytes = pool.admin.as_ref();
+            let created_by_bytes = pool.created_by.as_ref();
             let pool_id_bytes = pool.pool_id.to_le_bytes();
             let bump = pool.bump;
-            let seeds = &[SEED_POOL, admin_bytes, &pool_id_bytes, &[bump]];
+            let seeds = &[SEED_POOL, created_by_bytes, &pool_id_bytes, &[bump]];
             let signer = &[&seeds[..]];
 
             token::transfer(
@@ -79,11 +79,11 @@ pub fn finalize_weights(ctx: Context<FinalizeWeights>) -> Result<()> {
         }
     }
 
-    pool.vault_balance = distributable_amount;
+    pool.total_volume = distributable_amount;
     pool.weight_finalized = true;
 
     emit!(WeightsFinalized {
-        pool_name: pool.name.clone(),
+        pool_name: pool.title.clone(),
         total_weight: pool.total_weight,
         fee_deducted: fee_amount,
     });

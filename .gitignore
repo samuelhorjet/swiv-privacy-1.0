@@ -9,3 +9,4 @@ build
 artifacts/
 *.txt
 tests/keys/
+keypair.json

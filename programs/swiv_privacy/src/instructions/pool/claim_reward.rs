@@ -1,6 +1,6 @@
 use crate::constants::{SEED_POOL, SEED_POOL_VAULT};
 use crate::errors::CustomError;
-use crate::state::{BetStatus, Pool, UserBet};
+use crate::state::{BetStatus, Pool, Bet};
 use crate::events::RewardClaimed;
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
@@ -12,7 +12,7 @@ pub struct ClaimReward<'info> {
 
     #[account(
         mut,
-        seeds = [SEED_POOL, pool.admin.as_ref(), &(pool.pool_id.to_le_bytes())],
+        seeds = [SEED_POOL, pool.created_by.as_ref(), &(pool.pool_id.to_le_bytes())],
         bump = pool.bump
     )]
     pub pool: Box<Account<'info, Pool>>,
@@ -27,9 +27,9 @@ pub struct ClaimReward<'info> {
 
     #[account(
         mut,
-        constraint = user_bet.owner == user.key() @ CustomError::Unauthorized,
+        constraint = bet.user_pubkey == user.key() @ CustomError::Unauthorized,
     )]
-    pub user_bet: Box<Account<'info, UserBet>>,
+    pub bet: Box<Account<'info, Bet>>,
 
     #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>,
@@ -39,13 +39,13 @@ pub struct ClaimReward<'info> {
 
 pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
-    let bet = &mut ctx.accounts.user_bet;
+    let bet = &mut ctx.accounts.bet;
     let mut payout_amount: u64 = 0;
 
     require!(pool.weight_finalized, CustomError::SettlementTooEarly);
 
     if bet.calculated_weight > 0 && pool.total_weight > 0 {
-        let total_distributable_pot = pool.vault_balance as u128;
+        let total_distributable_pot = pool.total_volume as u128;
 
         payout_amount = bet
             .calculated_weight
@@ -57,14 +57,14 @@ pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
 
     if payout_amount > 0 {
         require!(
-            payout_amount <= pool.vault_balance,
+            payout_amount <= pool.total_volume,
             CustomError::InsufficientLiquidity
         );
 
-        let admin_bytes = pool.admin.as_ref();
+        let created_by_bytes = pool.created_by.as_ref();
         let pool_id_bytes = pool.pool_id.to_le_bytes();
         let bump = pool.bump;
-        let seeds = &[SEED_POOL, admin_bytes, &pool_id_bytes, &[bump]];
+        let seeds = &[SEED_POOL, created_by_bytes, &pool_id_bytes, &[bump]];
         let signer = &[&seeds[..]];
 
         token::transfer(
